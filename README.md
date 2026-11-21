@@ -8,12 +8,12 @@ and the other device is in the call the moment it opens it.
 The link is the whole ritual. A shared room code is relayed through a public MQTT
 broker over WebSocket, which carries nothing but the code, a display name and the
 SDP/ICE handshake; media, messages and files go point to point. Hole-punching
-through public STUN is the default path, so a device in one city reaches a device
-in another. A shared free TURN relay sits behind a switch in Settings for the
-carriers that defeat hole-punching. Nothing is stored or uploaded by anyone.
+through public STUN is how a device in one city reaches a device in another; a
+network that defeats it needs a TURN server of your own, added in Settings.
+Nothing is stored or uploaded by anyone.
 
 Manual pairing — one QR code each way, an invite link, copy/paste or a file — is
-still there under **Connect by hand** for networks that block the relay.
+still there under **Connect by hand** for networks that block the broker.
 
 ---
 
@@ -111,19 +111,18 @@ Then try chat, a voice call, a video call, screen sharing and a file drop.
 
 ### What will and will not connect
 
-Each device gathers candidates from the **public STUN servers**
-(`stun.l.google.com`) first, so a direct path is preferred whenever one exists.
-If hole-punching fails, switch on the **free TURN relay** (`turn.manual.to` over
-TCP/443) in **Settings → Connection** and retry — that is what reaches a
-mobile-network peer behind symmetric NAT. It is off by default because the shared
-demo servers were observed to stall a handshake that would otherwise have
-connected directly. You can point the relay at your own TURN server instead.
+Each device gathers candidates from several **public STUN servers** (Google,
+Nextcloud, Twilio) so a direct path is found whenever one exists; if one server's
+name fails to resolve, another answers. There is **no built-in TURN relay**: every
+free public relay tested from this network is dead, and a dead relay in the list
+slows or breaks a handshake that would otherwise connect. If you need to cross a
+symmetric NAT, add your own coturn entry under **Settings → Connection → Custom
+ICE servers** (`turn:host:443?transport=tcp|user|secret`) and it is used verbatim.
 
 - **Works** on the same network, on a LAN or VPN, and across ordinary home and
   mobile NATs — including two cities on two carriers.
-- **The relay is shared and free**, so treat it as availability, not bandwidth: a
-  relayed call works, but a direct path is always faster. Turn it off if you would
-  rather the connection fail than route through a third party.
+- **Fails** when both sides sit behind symmetric NAT and no TURN server is
+  configured. That is the one case only your own relay can solve.
 - **Signalling has to reach a broker.** If both networks block WebSocket/443, use
   **Connect by hand**, which needs no relay at all.
 
@@ -136,9 +135,8 @@ connected directly. You can point the relay at your own TURN server instead.
 - Signalling runs through a public MQTT broker: room code, display name, SDP and
   ICE only, and only until the peer connection exists. The invite room lives in
   the URL **fragment**, so the web host never sees it.
-- Media and files never touch the broker. They use a direct WebRTC path, or the
-  TURN relay when NAT refuses one — the relay is off by default and switched on
-  in Settings only when a call needs it.
+- Media and files never touch the broker. They use a direct WebRTC path, or a
+  TURN relay only if you add one yourself in Settings.
 - Message history lives in this browser's IndexedDB only, and only if the
   History setting is on.
 - Transport is DTLS (data) and SRTP (media) from WebRTC. Application-layer
@@ -221,7 +219,7 @@ For iOS, add the following to `ios/App/App/Info.plist` before building:
 ```
 src/
   modules/
-    connection/   link rooms over a public MQTT broker, trickle ICE, TURN relay,
+    connection/   link rooms over a public MQTT broker, trickle ICE, STUN,
                   and the manual SDP exchange (gzip+base64url, QR, invite links)
     messaging/    envelope, message union, sanitising
     calling/      transceivers, media capture, mute/flip, screen share

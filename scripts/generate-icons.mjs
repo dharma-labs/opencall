@@ -69,7 +69,7 @@ const FG = [244, 244, 244]; // #f4f4f4
  * Draws the OpenCall mark: a charcoal tile carrying an accent ring with a
  * light centre dot (a "connection" glyph that stays legible at 16 px).
  */
-function render(size, { square = false, glyph = 1 } = {}) {
+function render(size, { square = false, glyph = 1, transparent = false } = {}) {
   const SS = 4; // supersampling factor for antialiasing
   const rgba = Buffer.alloc(size * size * 4);
   const centre = size / 2;
@@ -80,7 +80,7 @@ function render(size, { square = false, glyph = 1 } = {}) {
   const dotRadius = size * 0.072 * glyph;
 
   const inTile = (x, y) => {
-    if (square) return true;
+    if (square || transparent) return true;
     const dx = Math.max(Math.abs(x - centre) - (size / 2 - radius), 0);
     const dy = Math.max(Math.abs(y - centre) - (size / 2 - radius), 0);
     return Math.hypot(dx, dy) - radius <= 0;
@@ -98,9 +98,10 @@ function render(size, { square = false, glyph = 1 } = {}) {
           const y = py + (sy + 0.5) / SS;
           if (!inTile(x, y)) continue;
           const d = Math.hypot(x - centre, y - centre);
-          let colour = BG;
-          if (d >= ringInner && d <= ringOuter) colour = ACCENT;
-          else if (d <= dotRadius) colour = FG;
+          const inRing = d >= ringInner && d <= ringOuter;
+          const inDot = d <= dotRadius;
+          if (transparent && !inRing && !inDot) continue;
+          const colour = inRing ? ACCENT : inDot ? FG : BG;
           // premultiplied accumulation keeps the rounded edges free of fringes
           r += colour[0];
           g += colour[1];
@@ -180,5 +181,22 @@ write(join(tauri, '128x128@2x.png'), bitmap(256));
 write(join(tauri, 'icon.png'), bitmap(512));
 write(join(tauri, 'icon.ico'), encodeIco(icoEntries));
 write(join(root, 'public', 'favicon.ico'), encodeIco(icoEntries));
+
+/* Android launcher icons: legacy rasters plus the adaptive foreground layer.
+   The adaptive background comes from res/values/ic_launcher_background.xml. */
+const androidRes = join(root, 'android', 'app', 'src', 'main', 'res');
+const legacyPx = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
+const adaptivePx = { mdpi: 81, hdpi: 108, xhdpi: 162, xxhdpi: 324, xxxhdpi: 432 };
+for (const [dpi, px] of Object.entries(legacyPx)) {
+  const dir = join(androidRes, `mipmap-${dpi}`);
+  write(join(dir, 'ic_launcher.png'), bitmap(px));
+  write(join(dir, 'ic_launcher_round.png'), bitmap(px, { square: true }));
+  // 0.62 keeps the glyph inside the 66 dp safe zone of the 108 dp canvas.
+  write(join(dir, 'ic_launcher_foreground.png'), bitmap(adaptivePx[dpi], {
+    square: true,
+    transparent: true,
+    glyph: 0.62,
+  }));
+}
 
 console.log('Done.');

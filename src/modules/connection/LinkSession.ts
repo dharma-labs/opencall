@@ -12,6 +12,8 @@ const PRESENCE_REFRESH_MS = 18_000;
 /** A partner whose presence has not been refreshed for this long has closed the page. */
 const PRESENCE_STALE_MS = 75_000;
 const RETRY_OFFER_AFTER_MS = 12_000;
+/** Handshake attempts after the first one, before the failure is shown. */
+const MAX_RESTARTS = 2;
 
 export interface LinkSessionHandlers {
   onStatus?: (message: string) => void;
@@ -42,6 +44,7 @@ export class LinkSession {
   private timers: number[] = [];
   private closing = false;
   private ended = false;
+  private restarts = 0;
 
   constructor(private options: LinkSessionOptions) {
     this.room = options.room;
@@ -95,6 +98,26 @@ export class LinkSession {
   markConnected(): void {
     this.offerSentAt = null;
     this.handlers.onStatus?.('Connected.');
+  }
+
+  /**
+   * Tear the agent down and handshake again. A failed first attempt is usually
+   * transient address discovery — STUN name resolution was measured to error
+   * once before it succeeded on this network — so the link gets a second try
+   * before any error reaches the screen. Returns false when the attempts run
+   * out, which is when the caller may report the failure.
+   */
+  restart(): boolean {
+    if (this.closing || this.ended || this.restarts >= MAX_RESTARTS) return false;
+    this.restarts += 1;
+    this.peer?.close();
+    this.peer = null;
+    this.remoteDescriptionSet = false;
+    this.queued = [];
+    this.offerSentAt = null;
+    this.handlers.onStatus?.('Retrying the direct path…');
+    if (this.isOfferer) void this.beginOffer();
+    return true;
   }
 
   private onPresence(presence: PresenceInfo, first: boolean): void {

@@ -87,14 +87,8 @@ export function SettingsView() {
 
         <div className="mt-3 border-t border-ink-800 pt-3">
           <Toggle
-            label="Free relay fallback"
-            hint={`Shared demo servers. Switch on only if a call fails to connect — on some networks they stall the handshake. Currently: ${plan}.`}
-            checked={preferences.useFreeRelay}
-            onChange={(next) => updatePreferences({ useFreeRelay: next })}
-          />
-          <Toggle
             label="Public STUN"
-            hint="Finds a direct path first. STUN never sees content."
+            hint={`Finds a direct path between two networks. STUN never sees content. Currently: ${plan}.`}
             checked={preferences.usePublicStun}
             onChange={(next) => updatePreferences({ usePublicStun: next })}
           />

@@ -3,29 +3,26 @@ import type { Diagnostics, Preferences } from '../../types';
 /**
  * ICE configuration.
  *
- * Public STUN lets two devices on different networks discover their public
- * addresses and hole-punch a direct path. When hole-punching fails — a strict
- * or symmetric NAT, common on mobile carriers — the free TURN relays below are
- * the fallback that actually connects Delhi to Mumbai. A relay only ever sees
- * encrypted SRTP/DTLS packets, and any of them can be swapped for your own
- * server in Settings → Connection.
+ * Public STUN lets two devices on different networks learn their public address
+ * and hole-punch a direct path. Several servers are listed because a single one
+ * is a single point of failure: name resolution for STUN hosts was measured to
+ * error on the first attempt and succeed on a later one, so redundancy is what
+ * makes the first pairing attempt land.
+ *
+ * There is no built-in TURN relay. Every free public relay checked from this
+ * network is dead (`turn.manual.to` refuses the connection, OpenRelay allocates
+ * nothing), and a broken relay in the list stalls a handshake that would
+ * otherwise connect. To traverse a symmetric NAT, put your own coturn entry in
+ * Settings → Connection; it is used verbatim.
  */
-export const PUBLIC_STUN_URLS = ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'];
-
-/** Community-run coturn instances, reachable over TCP 443, with static credentials. */
-export const FREE_RELAY_SERVERS: RTCIceServer[] = [
-  {
-    urls: [
-      'turn:free-1.manual.to:443?transport=tcp',
-      'turn:free-2.manual.to:443?transport=tcp',
-      'turn:turn.manual.to:443?transport=tcp',
-    ],
-    username: '99126',
-    credential: '1194964836117',
-  },
+export const PUBLIC_STUN_URLS = [
+  'stun:stun.l.google.com:19302',
+  'stun:stun1.l.google.com:19302',
+  'stun:stun.nextcloud.com:443',
+  'stun:global.stun.twilio.com:3478',
 ];
 
-export type IcePlanInput = Pick<Preferences, 'usePublicStun' | 'useFreeRelay' | 'customIceServers'>;
+export type IcePlanInput = Pick<Preferences, 'usePublicStun' | 'customIceServers'>;
 
 function normaliseUrl(value: string): string {
   return /^[a-z][a-z0-9+.-]*:/i.test(value) ? value : `stun:${value}`;
@@ -58,13 +55,11 @@ export function parseIceServers(text: string): RTCIceServer[] {
 export function buildIceConfig(input: IcePlanInput): RTCConfiguration {
   const iceServers: RTCIceServer[] = [];
   if (input.usePublicStun) iceServers.push({ urls: PUBLIC_STUN_URLS });
-  if (input.useFreeRelay) iceServers.push(...FREE_RELAY_SERVERS);
   iceServers.push(...parseIceServers(input.customIceServers));
   return {
     iceServers,
-    // Gather a couple of candidates ahead of the handshake so a link opens as
-    // soon as the other device is seen.
-    iceCandidatePoolSize: iceServers.length ? 2 : 0,
+    // No candidate pool: gathering starts when the peer connection is built, so
+    // the STUN attempts are spent against a peer that actually exists.
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require',
   };

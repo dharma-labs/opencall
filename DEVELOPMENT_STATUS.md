@@ -12,11 +12,12 @@ display name and SDP/ICE until the peer connection exists. Media, messages and
 files are point to point, and application-layer AES-256-GCM is on by default, so
 the broker cannot read a payload even on a relayed path.
 
-A **public STUN** server is used first so a direct path is preferred. A **free
-TURN relay over TCP/443** (`turn.manual.to`) exists behind a switch in Settings,
-off by default: on the live site the shared relay servers reproducibly stalled a
-pairing that connected in seconds with the relay disabled, so hole-punching is
-what ships on and the relay is the escalation path, not the first try.
+Hole-punching through **several public STUN servers** is the only built-in path.
+There is **no free TURN relay any more**: every public relay probed from this
+network is dead (`turn.manual.to` refuses the connection, OpenRelay allocates
+nothing), and leaving a dead relay in `iceServers` reproducibly stalled a pairing
+that connected in seconds without it. A user who needs to cross a symmetric NAT
+adds their own coturn entry under Settings → Connection, which is used verbatim.
 
 Manual pairing — **one QR code each way**, a `#oc=` invite link, copy/paste or a
 JSON file — is kept as the fallback for networks that block the broker, and needs
@@ -36,16 +37,17 @@ no relay of any kind.
 | Link handshake, live | Two peers in the same browser (top window + same-origin iframe) on `npm run preview` | **Pass — "New call" produced `…/#r=<code>`, the second peer opened it, both sides published retained presence on `oc/v1/<room>/p/<id>`, one side offered, the other answered, trickle ICE crossed, the data channel opened and both reached `connected · direct line`. Two chat messages sent in each direction arrived and rendered with delivery ticks.** |
 | Broker reachability | Node client against `wss://broker.emqx.io:8084/mqtt` | **Pass — anonymous connect, retained presence seen from the browser, offer received by the Node client, answer accepted by `setRemoteDescription`, ICE candidates (host + srflx) streamed.** |
 | Link handshake, live from the deployed site | Two peers in one browser (top window + same-origin iframe) on `https://dharma-labs.github.io/opencall/` | **Pass with the relay off — "New call" produced `https://dharma-labs.github.io/opencall/#r=<code>&n=Guest`, the second peer opened it, presence paired over the public broker and both sides reached `connected · direct line` within ~12 s.** |
-| Free relay fallback | Same pair, `useFreeRelay` toggled, broker observed from a Node subscriber | **Fail — with the relay on, both peers stalled at "Calling the other device…" / "Answering the call…" and one ended on `iceConnectionState: failed`; with it off the same build connected in seconds. During the stall the broker carried retained presence frames every ~9 s but no signal frames at all, so the answer never reached the offerer. Root cause not isolated; the default is now off.** |
+| ICE server reachability | `ice-probe.html` on the deployed site — one `RTCPeerConnection` per server, candidates and `onicecandidateerror` logged | **STUN works: Google, Twilio, VoIPBuster and Nextcloud each returned `srflx(149.22.84.142)`, but every server also reported `code=701 host lookup received error` on the first attempt, so name resolution here is flaky and redundancy is what makes the first try land. `stun.services.mozilla.com` and `stun.stunprotocol.org` returned nothing. TURN is dead: `turn.free-1.manual.to:443?transport=tcp` → `code=701 Failed to establish connection`, `turn.manual.to` likewise, OpenRelay allocated nothing. The free relay list was removed and the STUN set widened.** |
 | Hosting live | `https://dharma-labs.github.io/opencall/` (GitHub Pages from the `gh-pages` branch) | **Pass — `/`, the JS and CSS bundles, `sw.js`, `manifest.webmanifest` and `favicon.svg` all HTTP 200; the served shell renders `New call`, `Chats`, `History`, `Settings` and emits links on the Pages origin.** |
 | Pages auto-deploy | `.github/workflows/pages.yml` | **Blocked, not verified — the push was rejected with *"refusing to allow an OAuth App to create or update workflow without `workflow` scope"*. Publishing is currently a manual step: `npm run build`, then commit `dist/` to `gh-pages`.** |
 | Production serve | `npm run preview` | **Pass — `index.html`, the JS bundle and the CSS all 200; the served shell shows `Chats`, `History`, `Settings`, `New call`, `Paste a link to join`, `Send the link`, `Copy link` and the theme/accent/wallpaper switcher.** |
 | PWA assets in build | `npm run build` | **Pass — `manifest.webmanifest`, `sw.js`, `favicon.svg`, `favicon.ico`, `favicon.png`, `icons/` (192, 512, maskable-512, apple-touch-180, favicon-32) all emitted to `dist/`** |
 | Desktop shell boot (Electron) | `npx electron .` | **Pass — the window loaded `opencall://app/index.html` and the renderer ran; the only console output was Electron's dev-time CSP notice, which the packaged build silences.** |
-| Desktop package (Electron) | `npm run desktop:dist` | **Pass — rebuilt after the UI redesign with electron-builder 26.18.0 / Electron 45.4.1: `release/OpenCall-Setup-1.0.0.exe` (123,101,822 B ≈ 116.6 MiB), `release/OpenCall-Portable-1.0.0.exe` (111,736,433 B ≈ 106.6 MiB), `release/win-unpacked/OpenCall.exe`.** |
+| Desktop package (Electron) | `npm run desktop:dist` | **Pass — rebuilt after the UI redesign with electron-builder 26.18.0 / Electron 45.4.1: `release/OpenCall-Setup-1.0.0.exe` (123,103,485 B ≈ 116.6 MiB), `release/OpenCall-Portable-1.0.0.exe` (111,738,584 B ≈ 106.6 MiB), `release/win-unpacked/OpenCall.exe`.** |
 | Desktop build (Tauri 2) | `npm run desktop:tauri:build` | See §8 — reports its own result |
 | Mobile platform added | `npx cap add android` + `npx cap sync android` | **Pass — `android/` generated and the web build copied into `android/app/src/main/assets/public`; camera/microphone permissions added to `AndroidManifest.xml`** |
-| Android APK | `cd android && ./gradlew assembleDebug` | **Pass — `app-debug.apk` (4,589,788 B ≈ 4.38 MB), copied to `OpenCall-1.0.0-debug.apk`. Built with Capacitor 8 / AGP 8.13.0 / Gradle 8.14.3 on Temurin JDK 21.0.12 (see §8).** |
+| Android APK | `cd android && ./gradlew assembleDebug` | **Pass — `app-debug.apk` (4,598,191 B ≈ 4.39 MB), copied to `OpenCall-1.0.0-debug.apk`. Built with Capacitor 8 / AGP 8.13.0 / Gradle 8.14.3 on Temurin JDK 21.0.12 (see §8).** |
+| Android launcher icon | `node scripts/generate-icons.mjs`, then `unzip -l` on the APK | **Pass — the APK previously shipped Capacitor's default icon. The generator now writes legacy `ic_launcher`/`ic_launcher_round` plus adaptive `ic_launcher_foreground` for every density, and `ic_launcher_background` is the app charcoal `#0E0E14` instead of white. Verified inside the APK: `res/mipmap-hdpi-v4/ic_launcher.png` is the new 816 B glyph, not the old 2,786 B default.** |
 | Launch screen | `npm run dev` → first paint | **Pass — the "OpenCall / by Dharmendra" splash renders, then fades out once `document.fonts.ready` resolves (900 ms floor, 520 ms fade). Implemented in `src/components/common/Splash.tsx`, gated in `src/App.tsx`.** |
 
 ### What has NOT been verified
@@ -53,7 +55,7 @@ The link handshake, chat and delivery receipts were verified with two peers in o
 browser on one machine, which exercises signalling, trickle ICE, the data channel
 and the encryption path — but not a real network hop. Still unproven here: voice,
 video and screen sharing over an actual call, file transfer, a connection that
-must fall back to the TURN relay, and two devices on different carriers or
+must fall back to a TURN server of your own, and two devices on different carriers or
 different cities. Those need a second physical device.
 
 
@@ -69,15 +71,14 @@ different cities. Those need a second physical device.
 - **Browser-native primitives only.** RTCPeerConnection, RTCDataChannel,
   MediaDevices/getUserMedia/getDisplayMedia, WebCrypto (`crypto.subtle`),
   CompressionStream/DecompressionStream, IndexedDB, localStorage.
-- **Signalling uses a public broker; public STUN is on and the free TURN relay
-  is opt-in.** `SignalBus` exchanges SDP/ICE through `wss://broker.emqx.io:8084/mqtt`
+- **Signalling uses a public broker; public STUN is the only built-in ICE path.**
+  `SignalBus` exchanges SDP/ICE through `wss://broker.emqx.io:8084/mqtt`
   (with `wss://test.mosquitto.org:8081/mqtt` as backup, both replaceable in
   Settings) so a link alone is enough to connect two devices in different cities.
-  `buildIceConfig()` puts the public Google STUN servers in
-  `RTCPeerConnection.iceServers` and appends `FREE_RELAY_SERVERS` (TCP/443) only
-  when Settings enables the relay. The trade is disclosed rather than hidden:
-  reachability across carriers matters, but the shared demo relays were measured
-  to break a working handshake, so they no longer run by default.
+  `buildIceConfig()` puts four public STUN servers in
+  `RTCPeerConnection.iceServers` and nothing else; TURN is available only through
+  the custom-servers field, because every free public relay probed from this
+  network is dead and a dead relay stalls the handshake rather than saving it.
 - **No renegotiation after setup.** Audio + video `sendrecv` transceivers are
   pre-created on the offer, so starting a call needs no second SDP exchange.
 
@@ -98,10 +99,12 @@ different cities. Those need a second physical device.
   stays open for a late joiner without holding a dead peer; `bye` and an empty
   retained frame end it. Broker failure falls over to the backup, and
   `LinkSession` re-offers after 12 s if the answer never comes.
-- **Trickle ICE, STUN by default.** `buildIceConfig()` adds
-  `iceCandidatePoolSize: 2`, `bundlePolicy: 'max-bundle'` and the public Google STUN
-  servers; `FREE_RELAY_SERVERS` (three `turn…:443?transport=tcp` URLs) is appended
-  only when the relay switch in Settings is on.
+- **Trickle ICE, STUN only, retried automatically.** `buildIceConfig()` adds
+  `bundlePolicy: 'max-bundle'` and four public STUN servers, with no candidate
+  pool. When an agent reports `failed`, `LinkSession.restart()` closes it and
+  handshakes again on a fresh agent — up to `MAX_RESTARTS` (2) — because address
+  discovery here fails a name lookup on the first attempt and succeeds later.
+  Only after the attempts run out does an error reach the screen.
 - Manual SDP exchange: host creates an offer, guest returns an answer — **one code
   each way**, instead of the previous three. Kept as the **Connect by hand**
   fallback for networks that block the broker.
@@ -266,10 +269,11 @@ different cities. Those need a second physical device.
 
 ## 4. Known limitations & bugs
 
-1. **Strict NATs still need a relay.** The default public STUN servers let most
-   home and mobile networks hole-punch a direct path, but a symmetric NAT or a
-   carrier-grade NAT with no UDP hole will need a TURN relay. TURN is deliberately
-   off by default and must be typed into Settings; the UI says so.
+1. **Strict NATs need a TURN server you provide.** The four public STUN servers
+   let most home and mobile networks hole-punch a direct path, but a symmetric
+   NAT or carrier-grade NAT with no UDP hole cannot be crossed without a relay,
+   and no working free public relay exists to ship. Type your own coturn entry
+   into Settings → Connection → Custom ICE servers; the UI says the same.
 2. **Media paths are unverified in a real call.** Call control, device switching
    and screen sharing are wired and compile, but have not been exercised between
    two live peers.
@@ -377,12 +381,12 @@ Temurin JDK 21.0.12, Android SDK (platforms 34–37, build-tools 34.0.0–37.0.0
 | Target | Outcome | Artifact |
 | --- | --- | --- |
 | Web / PWA | Built and served successfully (rebuilt after the UI redesign) | `dist/` — `index.html` 1.52 kB, CSS 41.27 kB, JS 411.42 kB; shipped as `OpenCall-1.0.0-web.zip` (171,994 B) |
-| Electron desktop | **Built and packaged** after the UI redesign | `release/OpenCall-Setup-1.0.0.exe` (123,101,822 B ≈ 117.4 MiB), `release/OpenCall-Portable-1.0.0.exe` (111,736,433 B ≈ 106.6 MiB), `release/win-unpacked/OpenCall.exe` |
+| Electron desktop | **Built and packaged** after the UI redesign | `release/OpenCall-Setup-1.0.0.exe` (123,103,485 B ≈ 117.4 MiB), `release/OpenCall-Portable-1.0.0.exe` (111,738,584 B ≈ 106.6 MiB), `release/win-unpacked/OpenCall.exe` |
 | Tauri desktop (binary) | **Compiled** in 3m 05s (release profile, after the UI redesign) | `src-tauri/target/release/opencall.exe` (3,279,360 B ≈ 3.13 MiB) |
 | Tauri desktop (NSIS installer) | **Built** | `src-tauri/target/release/bundle/nsis/OpenCall_1.0.0_x64-setup.exe` (1,253,965 B ≈ 1.20 MiB) |
 | Tauri desktop (MSI) | **Failed — environment, not configuration.** Tauri downloads the WiX toolset to `%LOCALAPPDATA%\tauri\WixTools314`; the sandboxed shell blocks that write, so it reports `failed to bundle project: Access is denied. (os error 5)`. The binary and NSIS installer above are produced by the same run and are complete. Re-run `npm run desktop:tauri:build` from a normal terminal to get the MSI. | — |
 | Capacitor Android platform | **Added and synced** | `android/` with the web build in `android/app/src/main/assets/public` |
-| Android APK (debug) | **Built.** `gradlew assembleDebug` succeeded on Temurin JDK 21.0.12 with AGP 8.13.0 / Gradle 8.14.3 / compileSdk 36. The machine only ships JDK 25 (Android Studio's `jbr`), which Gradle 8.14 rejects with *Unsupported class file major version 69* — pointing `JAVA_HOME` at the JDK 21 in `~\.jdks` resolves it. | `android/app/build/outputs/apk/debug/app-debug.apk` (4,589,788 B ≈ 4.38 MB), copied to `OpenCall-1.0.0-debug.apk` |
+| Android APK (debug) | **Built.** `gradlew assembleDebug` succeeded on Temurin JDK 21.0.12 with AGP 8.13.0 / Gradle 8.14.3 / compileSdk 36. The machine only ships JDK 25 (Android Studio's `jbr`), which Gradle 8.14 rejects with *Unsupported class file major version 69* — pointing `JAVA_HOME` at the JDK 21 in `~\.jdks` resolves it. | `android/app/build/outputs/apk/debug/app-debug.apk` (4,598,191 B ≈ 4.39 MB), copied to `OpenCall-1.0.0-debug.apk` |
 | Android AAB (release) | **Not built.** `bundleRelease` needs a real signing key; the debug APK is the installable artifact. | — |
 | Capacitor iOS platform | **Not added.** `npx cap add ios` requires macOS with Xcode. `ios/` is intentionally absent. | — |
 

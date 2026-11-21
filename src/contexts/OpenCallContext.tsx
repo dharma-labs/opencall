@@ -429,11 +429,10 @@ export function OpenCallProvider({ children }: { children: ReactNode }) {
           setStatus('degraded');
           pushLog('warn', 'Connection interrupted. Waiting for ICE to recover.');
         } else if (state === 'failed') {
+          if (linkRef.current?.restart()) return;
           setStatus('failed');
           setError(
-            prefsRef.current.useFreeRelay
-              ? 'No path could be found, even through the relay. The network on one side is blocking WebRTC — retry, or try the other device on mobile data.'
-              : 'No direct path was found. Turn the relay on under Settings → Connection, or put both devices on the same Wi-Fi.',
+            'No path was found between the two devices. Retry, or put one of them on mobile data — some networks block the direct path outright.',
           );
           pushLog('error', 'Peer connection failed. STUN found no usable path.');
         } else if (state === 'closed') {
@@ -443,9 +442,10 @@ export function OpenCallProvider({ children }: { children: ReactNode }) {
       onIceState: (state) => {
         if (state === 'checking') setStatus((prev) => (prev === 'connected' ? prev : 'connecting'));
         if (state === 'failed') {
+          if (linkRef.current?.restart()) return;
           setStatus('failed');
           setError(
-            'Address discovery failed. Check that both devices have internet access, that the network does not block UDP, and that no firewall is closing the connection.',
+            'Address discovery failed. Check that both devices have internet access and that the network does not block UDP.',
           );
         }
       },

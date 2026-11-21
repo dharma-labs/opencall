@@ -17,10 +17,6 @@ export const DEFAULT_PREFERENCES: Preferences = {
   camDeviceId: null,
   // Without STUN, two devices on different networks can never reach each other.
   usePublicStun: true,
-  // The shared demo relays were observed to stall pairing against each other on
-  // a working connection, so hole-punching stays the default and the relay is
-  // opt-in from Settings → Connection.
-  useFreeRelay: false,
   signalingBrokers: '',
   customIceServers: '',
   theme: 'midnight',

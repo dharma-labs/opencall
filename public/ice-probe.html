@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenCall ICE probe</title>
+    <style>
+      body { background: #0b0f19; color: #e6ebf5; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; padding: 16px; }
+      h1 { font-size: 15px; margin: 0 0 6px; }
+      p { margin: 0 0 12px; color: #93a0b8; }
+      #log { white-space: pre-wrap; word-break: break-word; }
+      .scn { color: #7dd3fc; }
+      .ok { color: #4ade80; }
+      .bad { color: #f87171; }
+      button { font: inherit; padding: 6px 12px; margin-bottom: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>OpenCall ICE probe</h1>
+    <p>Gathers candidates from one server at a time, so each line says whether that
+      server is reachable from this network. Takes about a minute.</p>
+    <button onclick="location.reload()">Run again</button>
+    <div id="log">starting…</div>
+    <script>
+      const RELAY_CREDS = { username: '99126', credential: '1194964836117' };
+      const OPENRELAY = { username: 'openrelayproject', credential: 'openrelayproject' };
+      const SERVERS = [
+        { label: 'TURN openrelay.metered.ca:80/udp', urls: ['turn:openrelay.metered.ca:80'], ...OPENRELAY },
+        { label: 'TURN openrelay.metered.ca:443/udp', urls: ['turn:openrelay.metered.ca:443'], ...OPENRELAY },
+        { label: 'TURN openrelay.metered.ca:443/tcp', urls: ['turn:openrelay.metered.ca:443?transport=tcp'], ...OPENRELAY },
+        { label: 'TURN free-1.manual.to:3478/udp', urls: ['turn:free-1.manual.to:3478'], ...RELAY_CREDS },
+        { label: 'TURN turn.manual.to:443/tcp', urls: ['turn:turn.manual.to:443?transport=tcp'], ...RELAY_CREDS },
+        { label: 'STUN stun.nextcloud.com:443 (control)', urls: ['stun:stun.nextcloud.com:443'] },
+      ];
+
+      const out = document.getElementById('log');
+      const say = (m, cls) => {
+        out.insertAdjacentHTML('beforeend', cls ? '\n<' + cls + '>' + m + '</' + cls + '>' : '\n' + m);
+      };
+
+      function gather(server, ms) {
+        return new Promise((resolve) => {
+          const found = [];
+          const errors = [];
+          const pc = new RTCPeerConnection({ iceServers: [server] });
+          pc.createDataChannel('probe');
+          pc.onicecandidate = (e) => {
+            if (e.error) errors.push(e.error.message || String(e.error));
+            if (!e.candidate) return;
+            const c = e.candidate.candidate || '';
+            const kind = / typ relay/.test(c) ? 'relay' : / typ srflx/.test(c) ? 'srflx' : / typ prflx/.test(c) ? 'prflx' : 'host';
+            const ip = (c.match(/ (\S+) \d+ typ/) || [, '?'])[1];
+            const entry = found.find((f) => f.kind === kind && f.ip === ip);
+            if (!entry) found.push({ kind, ip, transport: /transport udp/.test(c) ? 'udp' : /transport tcp/.test(c) ? 'tcp' : 'tls?' });
+          };
+          pc.onicecandidateerror = (e) =>
+            errors.push('code=' + e.errorCode + ' ' + (e.errorText || '') + ' url=' + (e.url || '?'));
+          pc.createOffer().then((o) => pc.setLocalDescription(o)).catch(() => {});
+          setTimeout(() => {
+            pc.close();
+            resolve({ found, errors: [...new Set(errors)] });
+          }, ms);
+        });
+      }
+
+      (async () => {
+        say('host candidates are always local; the interesting column is srflx (public address) and relay (TURN).');
+        for (const s of SERVERS) {
+          const { found, errors } = await gather(s, 9000);
+          const kinds = found.map((f) => f.kind + '(' + f.ip + ',' + f.transport + ')');
+          const usable = found.some((f) => f.kind === 'srflx' || f.kind === 'relay');
+          say('\n' + s.label + '\n  candidates: ' + (kinds.length ? kinds.join(' ') : 'host only') +
+            '\n  errors: ' + (errors.length ? errors.join(' | ') : 'none'), usable ? 'ok' : 'bad');
+        }
+        say('\nDone.');
+      })();
+    </script>
+  </body>
+</html>

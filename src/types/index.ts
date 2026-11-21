@@ -103,8 +103,6 @@ export interface Preferences {
   camDeviceId: string | null;
   /** Reach the peer through a public STUN server so different networks can meet. */
   usePublicStun: boolean;
-  /** Fall back to a shared TURN relay when hole-punching fails. Costs a little latency, gains reachability. */
-  useFreeRelay: boolean;
   /** WebSocket endpoints used to carry the handshake behind an invite link. */
   signalingBrokers: string;
   /** Extra ICE servers, one per line: `stun:host:port` or `turn:host:port|user|secret`. */
