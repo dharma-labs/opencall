@@ -88,7 +88,7 @@ export function SettingsView() {
         <div className="mt-3 border-t border-ink-800 pt-3">
           <Toggle
             label="Free relay fallback"
-            hint={`Punches through strict networks over TCP/443. Currently: ${plan}.`}
+            hint={`Shared demo servers. Switch on only if a call fails to connect — on some networks they stall the handshake. Currently: ${plan}.`}
             checked={preferences.useFreeRelay}
             onChange={(next) => updatePreferences({ useFreeRelay: next })}
           />

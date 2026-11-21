@@ -7,9 +7,10 @@ and the other device is in the call the moment it opens it.
 
 The link is the whole ritual. A shared room code is relayed through a public MQTT
 broker over WebSocket, which carries nothing but the code, a display name and the
-SDP/ICE handshake; media, messages and files go point to point. A free TURN relay
-is enabled by default so a device in one city can reach a device in another
-through strict mobile NAT. Nothing is stored or uploaded by anyone.
+SDP/ICE handshake; media, messages and files go point to point. Hole-punching
+through public STUN is the default path, so a device in one city reaches a device
+in another. A shared free TURN relay sits behind a switch in Settings for the
+carriers that defeat hole-punching. Nothing is stored or uploaded by anyone.
 
 Manual pairing — one QR code each way, an invite link, copy/paste or a file — is
 still there under **Connect by hand** for networks that block the relay.
@@ -40,6 +41,22 @@ Checks:
 npm run typecheck   # strict TypeScript, no emit
 npm test            # unit tests (signalling, message protocol, encryption)
 ```
+
+### Publishing the site
+
+Invite links point at `https://dharma-labs.github.io/opencall/`, served by GitHub
+Pages from the `gh-pages` branch. To publish a new build:
+
+```bash
+npm run build
+# then commit dist/ (plus an empty .nojekyll) onto gh-pages
+gh api -X POST repos/dharma-labs/opencall/pages/builds
+```
+
+`docs/pages-deploy-workflow.yml` automates the same thing through GitHub Actions.
+Copy it to `.github/workflows/pages.yml` **from the GitHub web UI** — pushing a
+workflow file needs a `workflow` scope on the token, which the CLI login here does
+not have.
 
 ---
 
@@ -95,11 +112,12 @@ Then try chat, a voice call, a video call, screen sharing and a file drop.
 ### What will and will not connect
 
 Each device gathers candidates from the **public STUN servers**
-(`stun.l.google.com`) first, so a direct path is preferred whenever one exists. If
-it does not, the **free TURN relay** (`turn.manual.to` over TCP/443) carries the
-traffic instead — that is what makes a mobile-network peer reachable when its
-carrier uses symmetric NAT. Both are switchable in **Settings → Connection**, and
-you can point the relay at your own TURN server instead.
+(`stun.l.google.com`) first, so a direct path is preferred whenever one exists.
+If hole-punching fails, switch on the **free TURN relay** (`turn.manual.to` over
+TCP/443) in **Settings → Connection** and retry — that is what reaches a
+mobile-network peer behind symmetric NAT. It is off by default because the shared
+demo servers were observed to stall a handshake that would otherwise have
+connected directly. You can point the relay at your own TURN server instead.
 
 - **Works** on the same network, on a LAN or VPN, and across ordinary home and
   mobile NATs — including two cities on two carriers.
@@ -119,8 +137,8 @@ you can point the relay at your own TURN server instead.
   ICE only, and only until the peer connection exists. The invite room lives in
   the URL **fragment**, so the web host never sees it.
 - Media and files never touch the broker. They use a direct WebRTC path, or the
-  TURN relay when NAT refuses one — the relay is on by default and can be turned
-  off in Settings.
+  TURN relay when NAT refuses one — the relay is off by default and switched on
+  in Settings only when a call needs it.
 - Message history lives in this browser's IndexedDB only, and only if the
   History setting is on.
 - Transport is DTLS (data) and SRTP (media) from WebRTC. Application-layer
