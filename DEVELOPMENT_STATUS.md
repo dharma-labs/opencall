@@ -30,7 +30,7 @@ no relay of any kind.
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm run typecheck` (`tsc --noEmit`, strict) | **Pass** |
-| Unit tests | `npm test` (`vitest run`) | **Pass — 17/17 tests across 3 files** (signalling, message protocol, encryption) |
+| Unit tests | `npm test` (`vitest run`) | **Pass — 23/23 tests across 5 files** (signalling, message protocol, encryption, link handshake, broker election) |
 | One-QR handshake | `npx vitest run src/modules/connection/SignalingManager.test.ts` | **Pass — 7/7.** A realistic 3086-character Chrome offer (audio + video + 2 data channels, host/srflx/IPv6/TCP candidates) packs to **1368 characters** (< `DEFAULT_QR_CHARS` 1800), so `splitForQr()` returns **1** part and the whole offer fits a single QR code. The round trip decodes back to the identical SDP. |
 | Production build | `npm run build` (`tsc --noEmit && vite build`) | **Pass — 137 modules, `dist/index.html` 1.52 kB, CSS 50.07 kB (gzip 8.90 kB), JS 769.92 kB (gzip 247.28 kB). The size rise is mqtt.js, which the link handshake needs.** |
 | Dev server | `npm run dev` | **Pass — serves on http://localhost:5173, `/` and `/src/main.tsx` return HTTP 200 with no transform errors** |
@@ -38,12 +38,17 @@ no relay of any kind.
 | Broker reachability | Node client against `wss://broker.emqx.io:8084/mqtt` | **Pass — anonymous connect, retained presence seen from the browser, offer received by the Node client, answer accepted by `setRemoteDescription`, ICE candidates (host + srflx) streamed.** |
 | Link handshake, live from the deployed site | Two peers in one browser (top window + same-origin iframe) on `https://dharma-labs.github.io/opencall/` | **Pass with the relay off — "New call" produced `https://dharma-labs.github.io/opencall/#r=<code>&n=Guest`, the second peer opened it, presence paired over the public broker and both sides reached `connected · direct line` within ~12 s.** |
 | ICE server reachability | `ice-probe.html` on the deployed site — one `RTCPeerConnection` per server, candidates and `onicecandidateerror` logged | **STUN works: Google, Twilio, VoIPBuster and Nextcloud each returned `srflx(149.22.84.142)`, but every server also reported `code=701 host lookup received error` on the first attempt, so name resolution here is flaky and redundancy is what makes the first try land. `stun.services.mozilla.com` and `stun.stunprotocol.org` returned nothing. TURN is dead: `turn.free-1.manual.to:443?transport=tcp` → `code=701 Failed to establish connection`, `turn.manual.to` likewise, OpenRelay allocated nothing. The free relay list was removed and the STUN set widened.** |
+| Stalled path, measured | Two peers on `npm run preview` with every local candidate address rewritten to `192.0.2.1:1` (TEST-NET), so no pair can be reached | **Reproduces the worst case: the raw agent sat in `new` for 120 s with zero `iceconnectionstate` events, and the pre-deadline build left both screens at `Waiting for the direct path…` for 2.5 min and counting — no failure to react to, no retry, no error. This is why the retry is armed on a clock and not only on `failed`.** |
+| Retry + honest failure, live | Same blackholed peers on the deadline build | **Pass — the handshake restarted on the deadline, and once `MAX_RESTARTS` ran out both devices showed `Failed · Not connected` with *"No path was found between the two devices. Retry, or put one of them on mobile data…"* instead of hanging.** |
+| Deadline does not fire on a good call | Same build, peers unpatched | **Pass — reached `Connected` in ~8 s and stayed there through 120 s of polling; no retry, no error.** |
+| Offerer election stability | `npx vitest run src/modules/connection/SignalBus.test.ts` | **Pass — 3/3.** The election now reads join time, so it survives the heartbeat: the same pair yields the same offerer after `ts` crosses, the later joiner never takes the offer, and a peer that sends no join time still leaves exactly one offerer. Before this, `(ts, id)` handed the offer to the other device 7 s into a stalled handshake and both sides re-offered at each other. |
+| Connect deadline, unit | `npx vitest run src/modules/connection/LinkSession.test.ts` | **Pass — 3/3.** Fake timers + a stubbed broker: no path by 15 s closes the agent and re-offers with `Retrying the direct path…`; three stalls exhaust `MAX_RESTARTS` and raise the no-path error; `markConnected()` disarms the deadline for good. |
 | Hosting live | `https://dharma-labs.github.io/opencall/` (GitHub Pages from the `gh-pages` branch) | **Pass — `/`, the JS and CSS bundles, `sw.js`, `manifest.webmanifest` and `favicon.svg` all HTTP 200; the served shell renders `New call`, `Chats`, `History`, `Settings` and emits links on the Pages origin.** |
 | Pages auto-deploy | `.github/workflows/pages.yml` | **Blocked, not verified — the push was rejected with *"refusing to allow an OAuth App to create or update workflow without `workflow` scope"*. Publishing is currently a manual step: `npm run build`, then commit `dist/` to `gh-pages`.** |
 | Production serve | `npm run preview` | **Pass — `index.html`, the JS bundle and the CSS all 200; the served shell shows `Chats`, `History`, `Settings`, `New call`, `Paste a link to join`, `Send the link`, `Copy link` and the theme/accent/wallpaper switcher.** |
 | PWA assets in build | `npm run build` | **Pass — `manifest.webmanifest`, `sw.js`, `favicon.svg`, `favicon.ico`, `favicon.png`, `icons/` (192, 512, maskable-512, apple-touch-180, favicon-32) all emitted to `dist/`** |
 | Desktop shell boot (Electron) | `npx electron .` | **Pass — the window loaded `opencall://app/index.html` and the renderer ran; the only console output was Electron's dev-time CSP notice, which the packaged build silences.** |
-| Desktop package (Electron) | `npm run desktop:dist` | **Pass — rebuilt after the UI redesign with electron-builder 26.18.0 / Electron 45.4.1: `release/OpenCall-Setup-1.0.0.exe` (123,103,485 B ≈ 116.6 MiB), `release/OpenCall-Portable-1.0.0.exe` (111,738,584 B ≈ 106.6 MiB), `release/win-unpacked/OpenCall.exe`.** |
+| Desktop package (Electron) | `npm run desktop:dist` | **Pass — rebuilt after the UI redesign with electron-builder 26.18.0 / Electron 45.4.1: `release/OpenCall-Setup-1.0.0.exe` (123,103,709 B ≈ 116.6 MiB), `release/OpenCall-Portable-1.0.0.exe` (111,738,603 B ≈ 106.6 MiB), `release/win-unpacked/OpenCall.exe`.** |
 | Desktop build (Tauri 2) | `npm run desktop:tauri:build` | See §8 — reports its own result |
 | Mobile platform added | `npx cap add android` + `npx cap sync android` | **Pass — `android/` generated and the web build copied into `android/app/src/main/assets/public`; camera/microphone permissions added to `AndroidManifest.xml`** |
 | Android APK | `cd android && ./gradlew assembleDebug` | **Pass — `app-debug.apk` (4,598,191 B ≈ 4.39 MB), copied to `OpenCall-1.0.0-debug.apk`. Built with Capacitor 8 / AGP 8.13.0 / Gradle 8.14.3 on Temurin JDK 21.0.12 (see §8).** |
@@ -91,20 +96,30 @@ different cities. Those need a second physical device.
   a 31-symbol alphabet — on a public MQTT broker over WebSocket and publishes
   retained presence (`oc/v1/<room>/p/<id>`: id, display name, timestamp). Opening
   the link on the second device is the whole ritual: presence frames meet,
-  `electOfferer()` compares `(ts, id)` on both sides so exactly one device creates
-  the offer, SDP rides `oc/v1/<room>/d/<id>` with QoS 1, and ICE is trickle —
-  `PeerManager.setCandidateSink()` streams every `icecandidate` straight to the
-  peer, and candidates that arrive before the remote description are queued.
-  Presence refreshes every 18 s and is treated as stale after 75 s, so a room
-  stays open for a late joiner without holding a dead peer; `bye` and an empty
-  retained frame end it. Broker failure falls over to the backup, and
-  `LinkSession` re-offers after 12 s if the answer never comes.
-- **Trickle ICE, STUN only, retried automatically.** `buildIceConfig()` adds
+  `electOfferer()` compares `(born, id)` on both sides so exactly one device
+  creates the offer, SDP rides `oc/v1/<room>/d/<id>` with QoS 1, and ICE is
+  trickle — `PeerManager.setCandidateSink()` streams every `icecandidate`
+  straight to the peer, and candidates that arrive before the remote
+  description are queued. `born` is the moment a device joined and never moves;
+  the election used to read `ts`, which the 9 s heartbeat rewrites, and the
+  offerer then changed hands mid-handshake (measured: 7 s in, both devices
+  started re-offering at each other). Presence refreshes every 18 s and is
+  treated as stale after 75 s, so a room stays open for a late joiner without
+  holding a dead peer; `bye` and an empty retained frame end it. Broker failure
+  falls over to the backup, and `LinkSession` re-offers after 12 s if the answer
+  never comes.
+- **Trickle ICE, STUN only, retried on a deadline.** `buildIceConfig()` adds
   `bundlePolicy: 'max-bundle'` and four public STUN servers, with no candidate
-  pool. When an agent reports `failed`, `LinkSession.restart()` closes it and
-  handshakes again on a fresh agent — up to `MAX_RESTARTS` (2) — because address
-  discovery here fails a name lookup on the first attempt and succeeds later.
-  Only after the attempts run out does an error reach the screen.
+  pool. `LinkSession.restart()` closes the agent and handshakes again on a fresh
+  one, up to `MAX_RESTARTS` (2), and only when the attempts run out does an error
+  reach the screen. It is armed two ways: on an `failed` ICE report, and on
+  `CONNECT_DEADLINE_MS` (15 s) after both descriptions are exchanged. The
+  deadline is not decoration — an agent whose candidate pairs are all
+  unreachable was measured to sit in `new` for 120 s emitting **no**
+  `iceconnectionstate` event at all, so waiting for a failure report is waiting
+  for something that never arrives, and the call hangs at "Waiting for the
+  direct path…". Address discovery also genuinely fails a name lookup on the
+  first attempt here and succeeds later.
 - Manual SDP exchange: host creates an offer, guest returns an answer — **one code
   each way**, instead of the previous three. Kept as the **Connect by hand**
   fallback for networks that block the broker.
@@ -380,8 +395,8 @@ Temurin JDK 21.0.12, Android SDK (platforms 34–37, build-tools 34.0.0–37.0.0
 
 | Target | Outcome | Artifact |
 | --- | --- | --- |
-| Web / PWA | Built and served successfully (rebuilt after the UI redesign) | `dist/` — `index.html` 1.52 kB, CSS 41.27 kB, JS 411.42 kB; shipped as `OpenCall-1.0.0-web.zip` (171,994 B) |
-| Electron desktop | **Built and packaged** after the UI redesign | `release/OpenCall-Setup-1.0.0.exe` (123,103,485 B ≈ 117.4 MiB), `release/OpenCall-Portable-1.0.0.exe` (111,738,584 B ≈ 106.6 MiB), `release/win-unpacked/OpenCall.exe` |
+| Web / PWA | Built and served successfully (rebuilt after the UI redesign) | `dist/` — `index.html` 1.52 kB, CSS 41.27 kB, JS 411.42 kB; shipped as `OpenCall-1.0.0-web.zip` (284,998 B) |
+| Electron desktop | **Built and packaged** after the UI redesign | `release/OpenCall-Setup-1.0.0.exe` (123,103,709 B ≈ 117.4 MiB), `release/OpenCall-Portable-1.0.0.exe` (111,738,603 B ≈ 106.6 MiB), `release/win-unpacked/OpenCall.exe` |
 | Tauri desktop (binary) | **Compiled** in 3m 05s (release profile, after the UI redesign) | `src-tauri/target/release/opencall.exe` (3,279,360 B ≈ 3.13 MiB) |
 | Tauri desktop (NSIS installer) | **Built** | `src-tauri/target/release/bundle/nsis/OpenCall_1.0.0_x64-setup.exe` (1,253,965 B ≈ 1.20 MiB) |
 | Tauri desktop (MSI) | **Failed — environment, not configuration.** Tauri downloads the WiX toolset to `%LOCALAPPDATA%\tauri\WixTools314`; the sandboxed shell blocks that write, so it reports `failed to bundle project: Access is denied. (os error 5)`. The binary and NSIS installer above are produced by the same run and are complete. Re-run `npm run desktop:tauri:build` from a normal terminal to get the MSI. | — |
@@ -401,7 +416,7 @@ All six are current — rebuilt in the same run as the sources documented above.
 | `OpenCall_1.0.0_x64-setup.exe` | 1.20 MiB | Tauri NSIS installer |
 | `OpenCall-1.0.0-tauri-portable.exe` | 3.13 MiB | Tauri binary, runs with no installation |
 | `OpenCall-1.0.0-debug.apk` | 4.12 MB | Android debug APK, installs directly with `adb install -r` |
-| `OpenCall-1.0.0-web.zip` | 171,994 B | Static web/PWA build — unzip and serve over HTTPS |
+| `OpenCall-1.0.0-web.zip` | 284,998 B | Static web/PWA build — unzip and serve over HTTPS |
 
 The desktop builds are unsigned (no code-signing certificate is configured), so
 Windows SmartScreen will warn on first launch. Signing is a distribution concern

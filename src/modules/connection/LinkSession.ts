@@ -12,6 +12,13 @@ const PRESENCE_REFRESH_MS = 18_000;
 /** A partner whose presence has not been refreshed for this long has closed the page. */
 const PRESENCE_STALE_MS = 75_000;
 const RETRY_OFFER_AFTER_MS = 12_000;
+/**
+ * A line that is not open by then is started over. Chromium can leave a
+ * handshake in `new` forever when every candidate pair is unreachable —
+ * measured at 120 s with no `iceconnectionstate` change at all — so a stalled
+ * path has to be timed out, not waited for.
+ */
+const CONNECT_DEADLINE_MS = 15_000;
 /** Handshake attempts after the first one, before the failure is shown. */
 const MAX_RESTARTS = 2;
 
@@ -42,6 +49,7 @@ export class LinkSession {
   private queued: RTCIceCandidateInit[] = [];
   private offerSentAt: number | null = null;
   private timers: number[] = [];
+  private deadline: number | null = null;
   private closing = false;
   private ended = false;
   private restarts = 0;
@@ -97,7 +105,30 @@ export class LinkSession {
   /** Called by the orchestrator once the peer connection is live. */
   markConnected(): void {
     this.offerSentAt = null;
+    this.clearDeadline();
     this.handlers.onStatus?.('Connected.');
+  }
+
+  /**
+   * Both descriptions are exchanged, so the only thing left is the path itself.
+   * Either side may give up on it; `restart` keeps the role split, so only the
+   * device that offers hands out a new handshake.
+   */
+  private armDeadline(): void {
+    this.clearDeadline();
+    this.deadline = window.setTimeout(() => {
+      this.deadline = null;
+      if (this.closing || this.ended || this.peer?.controlOpen) return;
+      if (this.restart()) return;
+      this.handlers.onError?.(
+        'No path was found between the two devices. Retry, or put one of them on mobile data — some networks block the direct path outright.',
+      );
+    }, CONNECT_DEADLINE_MS);
+  }
+
+  private clearDeadline(): void {
+    if (this.deadline !== null) window.clearTimeout(this.deadline);
+    this.deadline = null;
   }
 
   /**
@@ -110,6 +141,7 @@ export class LinkSession {
   restart(): boolean {
     if (this.closing || this.ended || this.restarts >= MAX_RESTARTS) return false;
     this.restarts += 1;
+    this.clearDeadline();
     this.peer?.close();
     this.peer = null;
     this.remoteDescriptionSet = false;
@@ -202,6 +234,7 @@ export class LinkSession {
         const answer = await peer.createAnswerTrickle();
         if (!answer.sdp) throw new Error('The browser produced an empty answer.');
         this.bus.send('answer', from, answer);
+        this.armDeadline();
         this.handlers.onStatus?.('Answering the call…');
       } catch (error) {
         this.handlers.onError?.(error instanceof Error ? error.message : 'Could not accept the call.');
@@ -218,6 +251,7 @@ export class LinkSession {
         this.queued = [];
         this.remoteDescriptionSet = true;
         this.offerSentAt = null;
+        this.armDeadline();
         this.handlers.onStatus?.('Waiting for the direct path…');
       } catch (error) {
         this.handlers.onError?.(error instanceof Error ? error.message : 'The call could not be completed.');
@@ -247,6 +281,7 @@ export class LinkSession {
     if (this.closing) return;
     this.closing = true;
     this.sendBye();
+    this.clearDeadline();
     this.timers.forEach((timer) => window.clearInterval(timer));
     this.timers = [];
     this.peer?.setCandidateSink(null);

@@ -20,6 +20,8 @@ export interface PresenceInfo {
   id: string;
   name: string;
   ts: number;
+  /** When this device joined the room. Unlike `ts`, it never moves. */
+  born?: number;
 }
 
 export interface DirectSignal {
@@ -113,7 +115,12 @@ export function clearRoomFromLocation(): void {
 
 /** Stable ordering across both devices so exactly one side creates the offer. */
 function sortKey(presence: PresenceInfo): string {
-  return `${String(presence.ts).padStart(14, '0')}:${presence.id}`;
+  // `ts` is a heartbeat that both devices keep rewriting, so an election built
+  // on it changes hands in the middle of a handshake — measured: the offerer
+  // swapped sides 7 s in and the two devices then re-offered at each other.
+  // Join time is fixed, and a device that sends none counts as the earliest, so
+  // exactly one side offers either way.
+  return `${String(presence.born ?? 0).padStart(14, '0')}:${presence.id}`;
 }
 
 export class SignalBus {
@@ -137,7 +144,8 @@ export class SignalBus {
     this.room = room;
     this.handler = handlers;
     this.brokers = brokers.length ? brokers : DEFAULT_BROKERS;
-    this.self = { id: randomId(), name: displayName.slice(0, 24) || 'Peer', ts: Date.now() };
+    const joined = Date.now();
+    this.self = { id: randomId(), name: displayName.slice(0, 24) || 'Peer', ts: joined, born: joined };
   }
 
   get peerTopicRoot(): string {
@@ -233,7 +241,12 @@ export class SignalBus {
       try {
         const parsed = JSON.parse(text) as Partial<PresenceInfo>;
         if (typeof parsed.id === 'string' && typeof parsed.ts === 'number') {
-          presence = { id: parsed.id, name: String(parsed.name ?? 'Peer').slice(0, 24), ts: parsed.ts };
+          presence = {
+            id: parsed.id,
+            name: String(parsed.name ?? 'Peer').slice(0, 24),
+            ts: parsed.ts,
+            born: typeof parsed.born === 'number' ? parsed.born : undefined,
+          };
         }
       } catch {
         presence = null;
