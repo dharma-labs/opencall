@@ -1,0 +1,38 @@
+{
+  "name": "OpenCall — private peer-to-peer calling",
+  "short_name": "OpenCall",
+  "description": "Messaging, voice, video and file transfer directly between two devices. No server, no relay, no account.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#08080c",
+  "theme_color": "#08080c",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["social", "utilities", "productivity"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Create a session",
+      "short_name": "Create",
+      "description": "Start a new session and show the invitation code",
+      "url": "./?action=create",
+      "icons": [{ "src": "./icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Join a session",
+      "short_name": "Join",
+      "description": "Scan or paste a connection code",
+      "url": "./?action=join",
+      "icons": [{ "src": "./icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+node_modules/
+dist/
+release/
+*.local
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Capacitor / Android build output
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/capacitor-cordova-android-plugins/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Built installers/binaries copied to the repo root for convenience
+/OpenCall-*.exe
+/OpenCall_*.exe
+/OpenCall-*.apk
+/OpenCall-*.zip

@@ -1,0 +1,744 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --------------------------------------------------------------------- *
+ * Themes
+ *
+ * One place defines the whole skin: a surface ramp, an accent, two bubble
+ * colours and three semantic tones, all as space-separated RGB triplets so
+ * Tailwind's alpha syntax still works. `data-theme` picks a table,
+ * `data-accent` overrides the accent on top of it, `auto` leaves it alone.
+ * --------------------------------------------------------------------- */
+
+@layer base {
+  :root {
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.65);
+    --shadow-pop: 0 24px 64px -16px rgba(0, 0, 0, 0.72);
+
+    --ok: 48 209 88;
+    --warn: 255 214 10;
+    --bad: 255 69 58;
+
+    /* Faint texture behind the conversation. Themes replace it. */
+    --chat-pattern:
+      radial-gradient(120% 70% at 50% 0%, rgb(var(--accent) / 0.05), transparent 62%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.014), transparent 45%);
+
+    /* Midnight is the default ramp. */
+    --ink-950: 8 8 12;
+    --ink-900: 14 14 20;
+    --ink-850: 19 19 26;
+    --ink-800: 25 25 34;
+    --ink-750: 31 31 41;
+    --ink-700: 38 38 47;
+    --ink-600: 51 51 63;
+    --ink-500: 77 77 90;
+    --ink-400: 109 109 122;
+    --ink-300: 165 165 177;
+    --ink-200: 203 203 212;
+    --ink-100: 244 244 244;
+
+    --accent: 76 160 255;
+    --accent-hover: 111 179 255;
+    --accent-ink: 8 8 12;
+
+    --bubble-in: 30 30 38;
+    --bubble-out: 28 74 114;
+    --bubble-ink: 244 244 244;
+    --bubble-meta: 255 255 255;
+  }
+
+  html[data-theme='dark'] {
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.6), 0 8px 24px -12px rgba(0, 0, 0, 0.85);
+    --ink-950: 0 0 0;
+    --ink-900: 9 9 11;
+    --ink-850: 15 15 18;
+    --ink-800: 21 21 25;
+    --ink-750: 28 28 33;
+    --ink-700: 36 36 42;
+    --ink-600: 50 50 58;
+    --ink-500: 80 80 90;
+    --ink-400: 115 115 128;
+    --ink-300: 170 170 182;
+    --ink-200: 208 208 216;
+    --ink-100: 245 245 247;
+    --accent: 96 165 250;
+    --accent-hover: 137 190 254;
+    --bubble-in: 21 21 25;
+    --bubble-out: 24 62 96;
+  }
+
+  /* A ramp inversion, not a second stylesheet: the darkest step is the page and
+     the lightest is the text. */
+  html[data-theme='light'] {
+    --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 24px -14px rgba(16, 24, 40, 0.24);
+    --shadow-pop: 0 24px 64px -18px rgba(16, 24, 40, 0.28);
+    --ink-950: 244 245 248;
+    --ink-900: 255 255 255;
+    --ink-850: 240 242 246;
+    --ink-800: 231 234 240;
+    --ink-750: 221 226 233;
+    --ink-700: 208 214 223;
+    --ink-600: 186 193 204;
+    --ink-500: 141 150 164;
+    --ink-400: 109 118 133;
+    --ink-300: 78 88 103;
+    --ink-200: 45 53 66;
+    --ink-100: 17 22 30;
+    --accent: 37 99 235;
+    --accent-hover: 29 84 210;
+    --accent-ink: 255 255 255;
+    --ok: 21 128 61;
+    --warn: 180 130 3;
+    --bad: 220 38 38;
+    --bubble-in: 255 255 255;
+    --bubble-out: 219 236 254;
+    --bubble-ink: 17 22 30;
+    --bubble-meta: 78 88 103;
+    --chat-pattern:
+      radial-gradient(120% 70% at 50% 0%, rgb(var(--accent) / 0.06), transparent 60%),
+      linear-gradient(180deg, rgba(16, 24, 40, 0.02), transparent 45%);
+  }
+
+  html[data-theme='whatsapp'] {
+    --ink-950: 10 16 20;
+    --ink-900: 17 27 33;
+    --ink-850: 22 34 41;
+    --ink-800: 30 44 51;
+    --ink-750: 38 52 59;
+    --ink-700: 47 62 70;
+    --ink-600: 65 80 88;
+    --ink-500: 97 111 117;
+    --ink-400: 128 141 146;
+    --ink-300: 173 184 188;
+    --ink-200: 206 214 217;
+    --ink-100: 233 237 239;
+    --accent: 0 168 132;
+    --accent-hover: 51 184 152;
+    --accent-ink: 8 20 22;
+    --ok: 0 168 132;
+    --warn: 212 172 13;
+    --bubble-in: 34 47 54;
+    --bubble-out: 0 92 75;
+    --bubble-meta: 233 237 239;
+    --chat-pattern:
+      radial-gradient(circle at 12% 18%, rgb(var(--accent) / 0.05) 0 2px, transparent 3px),
+      radial-gradient(circle at 78% 62%, rgb(255 255 255 / 0.025) 0 2px, transparent 3px),
+      linear-gradient(180deg, #0b1013, #111b21);
+    --chat-pattern-size: 180px 180px, 240px 240px, auto;
+  }
+
+  html[data-theme='letsfi'] {
+    --ink-950: 6 10 20;
+    --ink-900: 10 16 30;
+    --ink-850: 14 22 40;
+    --ink-800: 19 29 50;
+    --ink-750: 25 37 62;
+    --ink-700: 33 47 76;
+    --ink-600: 46 62 94;
+    --ink-500: 82 100 134;
+    --ink-400: 118 136 168;
+    --ink-300: 160 176 204;
+    --ink-200: 200 212 232;
+    --ink-100: 238 244 252;
+    --accent: 34 211 238;
+    --accent-hover: 103 232 249;
+    --accent-ink: 6 10 20;
+    --ok: 52 211 153;
+    --warn: 250 204 21;
+    --bad: 248 113 113;
+    --bubble-in: 19 29 50;
+    --bubble-out: 8 118 148;
+    --chat-pattern:
+      radial-gradient(100% 60% at 20% 0%, rgb(var(--accent) / 0.1), transparent 60%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 45%);
+  }
+
+  html[data-theme='galib'] {
+    --ink-950: 14 12 10;
+    --ink-900: 20 17 14;
+    --ink-850: 26 22 18;
+    --ink-800: 33 28 22;
+    --ink-750: 41 34 27;
+    --ink-700: 52 43 34;
+    --ink-600: 70 58 46;
+    --ink-500: 106 90 72;
+    --ink-400: 140 124 106;
+    --ink-300: 180 166 148;
+    --ink-200: 214 203 188;
+    --ink-100: 244 238 229;
+    --accent: 245 158 11;
+    --accent-hover: 251 191 36;
+    --accent-ink: 20 17 14;
+    --ok: 132 204 22;
+    --warn: 251 191 36;
+    --bad: 239 83 80;
+    --bubble-in: 33 28 22;
+    --bubble-out: 104 74 28;
+    --chat-pattern:
+      radial-gradient(110% 70% at 50% 0%, rgb(var(--accent) / 0.08), transparent 62%),
+      linear-gradient(180deg, rgba(255, 244, 214, 0.02), transparent 45%);
+  }
+
+  /* Accent choices sit on top of whichever ramp is active. */
+  html[data-accent='blue'] {
+    --accent: 76 160 255;
+    --accent-hover: 111 179 255;
+    --accent-ink: 8 8 12;
+  }
+  html[data-accent='green'] {
+    --accent: 48 209 88;
+    --accent-hover: 88 219 118;
+    --accent-ink: 8 14 10;
+  }
+  html[data-accent='teal'] {
+    --accent: 20 184 166;
+    --accent-hover: 45 212 191;
+    --accent-ink: 6 20 20;
+  }
+  html[data-accent='amber'] {
+    --accent: 245 158 11;
+    --accent-hover: 251 191 36;
+    --accent-ink: 24 16 2;
+  }
+  html[data-accent='violet'] {
+    --accent: 139 92 246;
+    --accent-hover: 167 139 250;
+    --accent-ink: 255 255 255;
+  }
+  html[data-accent='rose'] {
+    --accent: 244 63 94;
+    --accent-hover: 251 113 133;
+    --accent-ink: 255 255 255;
+  }
+
+  html[data-wallpaper='off'] {
+    --chat-pattern: none;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-ink-950 text-ink-100 font-sans antialiased;
+    margin: 0;
+    letter-spacing: -0.011em;
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    overscroll-behavior-y: none;
+    overflow-x: hidden;
+    transition: background-color 0.22s ease, color 0.22s ease;
+  }
+
+  /* Keep the app clear of notches, home indicators and rounded corners when it
+     runs standalone on a phone. #root is border-box, so padding is absorbed. */
+  @supports (padding: env(safe-area-inset-top)) {
+    #root {
+      padding-top: env(safe-area-inset-top);
+      padding-right: env(safe-area-inset-right);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+    }
+  }
+
+  button,
+  a,
+  label,
+  summary,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.022em;
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background: rgb(var(--accent) / 0.26);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--ink-500) / 0.35) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: rgb(var(--ink-500) / 0.35);
+    background-clip: content-box;
+    border: 3px solid transparent;
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--ink-500) / 0.55);
+    background-clip: content-box;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent) / 0.55);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-2xl border border-ink-700/70 bg-ink-900/80;
+  }
+
+  .surface {
+    @apply rounded-2xl border border-ink-700/60 bg-ink-850/60;
+  }
+
+  .btn {
+    @apply relative inline-flex select-none items-center justify-center gap-2 overflow-hidden rounded-xl
+      border border-ink-700 bg-ink-800 px-3.5 py-2 text-sm font-medium text-ink-100
+      transition duration-150 ease-out hover:border-ink-600 hover:bg-ink-750
+      active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45;
+  }
+
+  .btn-sm {
+    @apply px-2.5 py-1.5 text-xs;
+  }
+
+  .btn-primary {
+    @apply border-accent/50 bg-accent text-accent-ink hover:border-accent hover:bg-accent-hover;
+  }
+
+  /* Light sweep on the primary action, borrowed from the reference interaction. */
+  .btn-primary::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    transform: translateX(-100%);
+    background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.34) 50%, transparent 70%);
+    transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .btn-primary:hover::after {
+    transform: translateX(100%);
+  }
+
+  .btn-ghost {
+    @apply border-transparent bg-transparent text-ink-300 hover:bg-ink-800 hover:text-ink-100;
+  }
+
+  .btn-danger {
+    @apply border-bad/40 bg-transparent text-bad hover:bg-bad/10 hover:text-bad;
+  }
+
+  .icon-btn {
+    @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-ink-700
+      bg-ink-850 text-ink-300 transition duration-150 ease-out hover:border-ink-600 hover:bg-ink-800
+      hover:text-ink-100 active:scale-[0.96] disabled:pointer-events-none disabled:opacity-40;
+  }
+
+  .icon-btn-on {
+    @apply border-accent/60 bg-accent/15 text-accent hover:bg-accent/25;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-ink-700 bg-ink-900 px-3 py-2 text-sm text-ink-100
+      transition-colors placeholder:text-ink-500 focus:border-accent/60 focus:outline-none
+      focus:ring-2 focus:ring-accent/25;
+  }
+
+  .label {
+    @apply text-[11px] font-medium uppercase tracking-wider text-ink-400;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-ink-700 bg-ink-850 px-2.5 py-1
+      text-[11px] font-medium text-ink-300;
+  }
+
+  .muted {
+    @apply text-ink-400;
+  }
+
+  .mono {
+    @apply font-mono text-[11px];
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Chrome
+   * ------------------------------------------------------------------ */
+
+  .navbar {
+    @apply sticky top-0 z-20 shrink-0 border-b border-ink-800/70 bg-ink-950/80 backdrop-blur-xl;
+  }
+
+  .navbar-row {
+    @apply flex items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4;
+  }
+
+  .tabs {
+    @apply flex items-center gap-0.5 rounded-full border border-ink-800 bg-ink-900/70 p-1;
+  }
+
+  .tab {
+    @apply flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-ink-400 transition-colors
+      hover:text-ink-200;
+  }
+
+  .tab-on {
+    @apply bg-ink-800 text-ink-100;
+  }
+
+  .avatar {
+    @apply relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-750 text-sm
+      font-semibold text-ink-200;
+  }
+
+  .avatar-lg {
+    @apply h-11 w-11 text-base;
+  }
+
+  .avatar-dot {
+    @apply absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-ink-950 bg-ink-500;
+  }
+
+  .avatar-dot-on {
+    @apply bg-ok;
+  }
+
+  /* An icon button with no chassis, for use inside a composer or a bar. */
+  .icon-btn-plain {
+    @apply border-transparent bg-transparent text-ink-400 hover:border-transparent hover:bg-ink-750
+      hover:text-ink-100;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Conversation
+   * ------------------------------------------------------------------ */
+
+  .chat-canvas {
+    background-image: var(--chat-pattern);
+    background-size: var(--chat-pattern-size, auto);
+  }
+
+  .bubble {
+    @apply relative rounded-2xl text-sm leading-relaxed;
+    color: rgb(var(--bubble-ink));
+  }
+
+  .bubble-in {
+    @apply bg-bubble-in;
+  }
+
+  .bubble-out {
+    @apply bg-bubble-out;
+  }
+
+  /* One tail on the last bubble of a run: the single gesture that makes a stack
+     of messages read as a conversation rather than a list. */
+  .bubble-tail::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    width: 9px;
+    height: 13px;
+  }
+
+  .bubble-out.bubble-tail::after {
+    right: -5px;
+    background: rgb(var(--bubble-out));
+    clip-path: polygon(0 0, 100% 100%, 0 100%);
+    border-bottom-right-radius: 3px;
+  }
+
+  .bubble-in.bubble-tail::after {
+    left: -5px;
+    background: rgb(var(--bubble-in));
+    clip-path: polygon(100% 0, 100% 100%, 0 100%);
+    border-bottom-left-radius: 3px;
+  }
+
+  /* Timestamp and ticks live inside the bubble, quieter than the words. */
+  .bubble-meta {
+    color: rgb(var(--bubble-meta) / 0.62);
+  }
+
+  .bubble-quote {
+    @apply rounded-lg;
+    background: rgb(var(--bubble-meta) / 0.1);
+  }
+
+  .bubble-quote-name {
+    color: rgb(var(--accent) / 0.95);
+  }
+
+  .bubble-quote-text {
+    color: rgb(var(--bubble-meta) / 0.8);
+  }
+
+  .chat-day {
+    @apply mx-auto rounded-full border border-ink-800 bg-ink-900/90 px-3 py-1 text-[11px] font-medium
+      text-ink-400 backdrop-blur;
+  }
+
+  .composer {
+    @apply flex items-end gap-1 rounded-3xl border border-ink-700 bg-ink-850 p-1.5 transition-colors
+      focus-within:border-ink-600;
+  }
+
+  .composer-input {
+    @apply max-h-32 min-h-[36px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-ink-100
+      outline-none placeholder:text-ink-500;
+  }
+
+  .composer-btn {
+    @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-400
+      transition-colors hover:bg-ink-750 hover:text-ink-100 disabled:pointer-events-none disabled:opacity-40;
+  }
+
+  .composer-btn-on {
+    @apply bg-ink-750 text-accent;
+  }
+
+  .send-btn {
+    @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink
+      transition duration-150 ease-out hover:bg-accent-hover active:scale-95
+      disabled:pointer-events-none disabled:opacity-30;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Two-pane layout
+   * ------------------------------------------------------------------ */
+
+  /* Chats on the left, the conversation on the right — the shape everyone
+     already knows from a messenger on a big screen. */
+  .app-grid {
+    @apply mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-col px-0 py-0 sm:px-2 sm:py-2 lg:flex-row lg:gap-3 lg:px-4 lg:py-3;
+  }
+
+  .sidebar {
+    @apply flex w-full shrink-0 flex-col overflow-hidden border-ink-800/70 bg-ink-900/60 lg:h-full lg:w-[336px] lg:rounded-2xl lg:border;
+  }
+
+  .chatlist {
+    @apply min-h-0 flex-1 overflow-y-auto;
+  }
+
+  .chatlist-row {
+    @apply flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150;
+  }
+
+  .chatlist-row-on {
+    @apply bg-ink-800/80;
+  }
+
+  .chatlist-row-off {
+    @apply hover:bg-ink-850/70;
+  }
+
+  .chatlist-title {
+    @apply truncate text-sm font-medium text-ink-100;
+  }
+
+  .chatlist-snippet {
+    @apply truncate text-xs text-ink-400;
+  }
+
+  .chatlist-time {
+    @apply shrink-0 text-[10px] tabular-nums text-ink-500;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Bottom navigation (phones only)
+   * ------------------------------------------------------------------ */
+
+  .bottom-nav {
+    @apply flex shrink-0 items-stretch justify-around border-t border-ink-800/70 bg-ink-950/90 backdrop-blur-xl sm:hidden;
+  }
+
+  .nav-item {
+    @apply flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium text-ink-400 transition-colors;
+  }
+
+  .nav-item-on {
+    @apply text-accent;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Theme switcher
+   * ------------------------------------------------------------------ */
+
+  .theme-menu {
+    @apply absolute right-2 top-[46px] z-40 w-64 animate-fade-in rounded-2xl border border-ink-700
+      bg-ink-900 p-2 shadow-pop sm:right-4 sm:top-[52px];
+  }
+
+  .swatch-row {
+    @apply flex flex-wrap gap-1.5;
+  }
+
+  .swatch {
+    @apply flex h-9 w-9 items-center justify-center rounded-xl border-2 border-transparent transition
+      hover:border-ink-600 active:scale-95;
+  }
+
+  .swatch-on {
+    @apply border-accent;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Rows and actions
+   * ------------------------------------------------------------------ */
+
+  /* The whole row is the target, the way a chat list works. */
+  .list-row {
+    @apply flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition duration-150
+      hover:bg-ink-850/70 active:scale-[0.995];
+  }
+
+  .row-icon {
+    @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-ink-700/70
+      bg-ink-850 text-ink-300;
+  }
+
+  .action-card {
+    @apply panel relative flex flex-col items-start gap-3 p-5 text-left transition duration-200
+      hover:border-accent/45 hover:bg-ink-850/70 active:scale-[0.99] disabled:opacity-50;
+  }
+
+  .step-index {
+    @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-ink-700 bg-ink-850
+      text-[11px] font-semibold text-ink-300;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Connection screens
+   * ------------------------------------------------------------------ */
+
+  .screen-head {
+    @apply flex items-center justify-between gap-3;
+  }
+
+  .seg {
+    @apply flex flex-wrap gap-1 rounded-xl border border-ink-800 bg-ink-900/70 p-1;
+  }
+
+  .seg-btn {
+    @apply flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors;
+  }
+
+  .seg-btn-on {
+    @apply bg-ink-750 text-ink-100;
+  }
+
+  .seg-btn-off {
+    @apply text-ink-400 hover:text-ink-200;
+  }
+
+  /* A link is the primary artefact of a connection; show it big and copyable. */
+  .link-card {
+    @apply w-full break-all rounded-2xl border border-accent/35 bg-accent/10 px-4 py-3 text-center
+      font-mono text-[11px] leading-relaxed text-ink-100;
+  }
+
+  /* The QR always sits on white so a camera can read it in any skin. */
+  .qr-frame {
+    @apply rounded-3xl border border-ink-700/70 bg-white p-3 shadow-card;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Calls
+   * ------------------------------------------------------------------ */
+
+  .call-btn {
+    @apply inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-ink-700
+      bg-ink-850/90 text-ink-200 backdrop-blur transition duration-150 ease-out hover:bg-ink-800
+      hover:text-ink-100 active:scale-95 disabled:pointer-events-none disabled:opacity-40;
+  }
+
+  .call-btn-on {
+    @apply border-accent/60 bg-accent text-accent-ink hover:bg-accent-hover;
+  }
+
+  .call-btn-end {
+    @apply border-bad/50 bg-bad text-white hover:bg-bad/90;
+  }
+
+  .call-stage {
+    background-image: radial-gradient(90% 60% at 50% 0%, rgb(var(--accent) / 0.12), transparent 65%),
+      linear-gradient(180deg, rgb(var(--ink-900)), rgb(var(--ink-950)));
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Splash
+   * ------------------------------------------------------------------ */
+
+  .splash {
+    @apply fixed inset-0 z-[60] flex flex-col items-center justify-center gap-7 bg-ink-950
+      transition-opacity duration-500 ease-out;
+  }
+
+  .splash-hidden {
+    @apply pointer-events-none opacity-0;
+  }
+
+  .splash-halo {
+    @apply absolute h-24 w-24 rounded-full blur-2xl;
+    background: rgb(var(--accent) / 0.25);
+  }
+
+  .splash-bar {
+    @apply relative h-[3px] w-32 overflow-hidden rounded-full bg-ink-800;
+  }
+
+  .splash-bar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, rgb(var(--accent) / 0.95), transparent);
+    animation: shimmer 1.25s ease-in-out infinite;
+  }
+
+  /* Fingers need bigger targets than cursors. */
+  @media (pointer: coarse) {
+    .btn {
+      min-height: 2.75rem;
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+
+    .btn-sm {
+      min-height: 2.5rem;
+    }
+
+    .icon-btn {
+      height: 2.75rem;
+      width: 2.75rem;
+    }
+
+    .composer-btn,
+    .send-btn {
+      height: 2.5rem;
+      width: 2.5rem;
+    }
+
+    .touch-visible {
+      opacity: 1;
+    }
+  }
+}
