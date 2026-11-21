@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenCall ICE probe</title>
+    <style>
+      body { background: #0b0f19; color: #e6ebf5; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; padding: 16px; }
+      h1 { font-size: 15px; margin: 0 0 12px; }
+      #log { white-space: pre-wrap; word-break: break-word; }
+      .scn { color: #7dd3fc; margin-top: 14px; }
+      .ok { color: #4ade80; }
+      .bad { color: #f87171; }
+      button { font: inherit; padding: 6px 12px; margin-bottom: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>OpenCall ICE probe — two local peers, no signalling server</h1>
+    <button onclick="location.reload()">Run again</button>
+    <div id="log">starting…</div>
+    <script>
+      const STUN = ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'];
+      const RELAY = {
+        urls: [
+          'turn:free-1.manual.to:443?transport=tcp',
+          'turn:free-2.manual.to:443?transport=tcp',
+          'turn:turn.manual.to:443?transport=tcp',
+        ],
+        username: '99126',
+        credential: '1194964836117',
+      };
+      const out = document.getElementById('log');
+      const say = (m, cls) => {
+        out.insertAdjacentHTML('beforeend', cls ? '\n<' + cls + '>' + m + '</' + cls + '>' : '\n' + m);
+        out.scrollTop = out.scrollHeight;
+      };
+
+      const SCENARIOS = [
+        { name: 'A host-only (no servers)', config: { iceServers: [] } },
+        { name: 'B public STUN', config: { iceServers: [{ urls: STUN }], iceCandidatePoolSize: 2, bundlePolicy: 'max-bundle' } },
+        { name: 'C STUN + free relay (current settings)', config: { iceServers: [{ urls: STUN }, RELAY], iceCandidatePoolSize: 2, bundlePolicy: 'max-bundle' } },
+        { name: 'D relay only', config: { iceServers: [RELAY], bundlePolicy: 'max-bundle' } },
+      ];
+
+      function run(pcA, pcB, log) {
+        const seenA = [];
+        pcA.onicecandidate = (e) => {
+          if (e.error) log('  A candidate ERROR: ' + e.error.message);
+          if (!e.candidate) return log('  A gathering done');
+          const c = e.candidate.candidate || '';
+          const kind = / typ relay/.test(c) ? 'relay' : / typ srflx/.test(c) ? 'srflx' : / typ prflx/.test(c) ? 'prflx' : 'host';
+          seenA.push(kind);
+          log('  A ' + kind + ' ' + c.split(' ')[0] + ' ' + (c.match(/generation \d+/) || [''])[0]);
+          pcB.addIceCandidate(e.candidate).catch((err) => log('  A->B addIceCandidate FAILED: ' + err.message));
+        };
+        pcB.onicecandidate = (e) => {
+          if (e.error) log('  B candidate ERROR: ' + e.error.message);
+          if (!e.candidate) return;
+          pcA.addIceCandidate(e.candidate).catch((err) => log('  B->A addIceCandidate FAILED: ' + err.message));
+        };
+        return pcA
+          .createOffer()
+          .then((o) => pcA.setLocalDescription(o))
+          .then(() => pcB.setRemoteDescription(pcA.localDescription))
+          .then(() => pcB.createAnswer())
+          .then((a) => pcB.setLocalDescription(a))
+          .then(() => pcA.setRemoteDescription(pcB.localDescription))
+          .then(() => log('  SDP exchanged, answer applied'))
+          .catch((e) => log('  HANDSHAKE FAILED: ' + e.name + ' ' + e.message));
+      }
+
+      async function scenario(s) {
+        const lines = [];
+        const log = (m) => lines.push(m);
+        say('\n' + s.name, 'scn');
+        const mk = () => {
+          const pc = new RTCPeerConnection(s.config);
+          pc.oniceconnectionstatechange = () => log('  iceConnectionState=' + pc.iceConnectionState);
+          pc.onconnectionstatechange = () => log('  connectionState=' + pc.connectionState);
+          pc.onicecandidateerror = (e) =>
+            log('  candidateerror url=' + (e.url || '?') + ' code=' + (e.errorCode || '?') + ' text=' + (e.errorText || ''));
+          return pc;
+        };
+        const a = mk();
+        const b = mk();
+        const dc = a.createDataChannel('probe');
+        b.ondatachannel = (e) => e.channel.onopen = () => log('  data channel OPEN');
+        run(a, b, log);
+        const verdict = await new Promise((res) => {
+          setTimeout(() => res(a.iceConnectionState), 22000);
+          const t = setInterval(() => {
+            if (a.iceConnectionState === 'connected' || a.iceConnectionState === 'completed' || a.iceConnectionState === 'failed') {
+              clearInterval(t);
+              setTimeout(() => res(a.iceConnectionState), 1200);
+            }
+          }, 250);
+        });
+        let pair = 'none';
+        try {
+          const stats = await a.getStats();
+          stats.forEach((r) => {
+            if (r.type === 'candidate-pair' && r.state === 'succeeded') pair = r.candidateType + ' nominated=' + r.nominated;
+          });
+        } catch (e) {
+          log('  stats failed: ' + e.message);
+        }
+        say(lines.join('\n'));
+        say('  RESULT: ' + verdict + ' via ' + pair, verdict === 'connected' || verdict === 'completed' ? 'ok' : 'bad');
+        a.close();
+        b.close();
+      }
+
+      (async () => {
+        for (const s of SCENARIOS) await scenario(s);
+        say('\nAll scenarios finished.');
+      })();
+    </script>
+  </body>
+</html>
