@@ -22,7 +22,7 @@ import type {
 } from '../types';
 import { uid } from '../utils';
 import { PeerManager, type PeerCallbacks } from '../modules/connection/PeerManager';
-import { buildIceConfig } from '../modules/connection/ICEManager';
+import { buildIceConfig, warmIceServers } from '../modules/connection/ICEManager';
 import { LinkSession } from '../modules/connection/LinkSession';
 import {
   buildRoomLink,
@@ -635,6 +635,7 @@ export function OpenCallProvider({ children }: { children: ReactNode }) {
         displayName: prefsRef.current.displayName || 'Peer',
         brokers: brokerList(),
         makePeer: () => createPeer(),
+        warmIce: () => warmIceServers(buildIceConfig(prefsRef.current)),
         handlers: {
           onStatus: (message) => setLinkStatus(message),
           onPeerName: (name) => setPeerLabel(name),

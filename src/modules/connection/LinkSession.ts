@@ -36,6 +36,11 @@ export interface LinkSessionOptions {
   makePeer: () => PeerManager;
   handlers?: LinkSessionHandlers;
   brokers?: string[];
+  /**
+   * Warms address discovery while the link is still being sent. Returns a
+   * cancel, because the real handshake outranks the warm-up.
+   */
+  warmIce?: () => (() => void) | void;
 }
 
 export class LinkSession {
@@ -50,6 +55,7 @@ export class LinkSession {
   private offerSentAt: number | null = null;
   private timers: number[] = [];
   private deadline: number | null = null;
+  private cancelWarm: (() => void) | null = null;
   private closing = false;
   private ended = false;
   private restarts = 0;
@@ -66,8 +72,17 @@ export class LinkSession {
         onReady: () => this.handlers.onStatus?.('Link is live. Send it to the other device.'),
         onPeer: (peer, first) => this.onPresence(peer, first),
         onSignal: (signal) => void this.onSignal(signal.kind, signal.from, signal.data),
-        onPeerGone: (id) => {
-          if (this.partner?.id === id) this.finish('The other device closed the link.');
+        onPeerGone: (id, bye) => {
+          if (this.partner?.id !== id) return;
+          if (bye) {
+            this.finish('The other device closed the link.');
+            return;
+          }
+          // A call whose line is already open is proven by the data channel, not
+          // by presence; a throttled background tab must not end it.
+          if (this.peer?.controlOpen) return;
+          this.partner = null;
+          this.handlers.onStatus?.('Waiting for the other device to open the link…');
         },
         onCrowded: (count) =>
           this.handlers.onError?.(
@@ -93,6 +108,7 @@ export class LinkSession {
 
   start(): void {
     this.bus.connect();
+    this.cancelWarm = this.options.warmIce?.() ?? null;
     this.timers.push(
       window.setInterval(() => {
         this.bus.refresh();
@@ -129,6 +145,13 @@ export class LinkSession {
   private clearDeadline(): void {
     if (this.deadline !== null) window.clearTimeout(this.deadline);
     this.deadline = null;
+  }
+
+  /** The real agent outranks the warm-up; drop the throwaway one the moment it is needed. */
+  private stopWarm(): void {
+    const cancel = this.cancelWarm;
+    this.cancelWarm = null;
+    cancel?.();
   }
 
   /**
@@ -179,6 +202,7 @@ export class LinkSession {
 
   private async beginOffer(): Promise<void> {
     if (this.closing || !this.partner) return;
+    this.stopWarm();
     const peer = this.ensurePeer();
     peer.createDataChannels();
     this.handlers.onOffering?.();
@@ -225,6 +249,7 @@ export class LinkSession {
       if (this.isOfferer) return;
       const offer = data as RTCSessionDescriptionInit;
       if (offer.type !== 'offer' || !offer.sdp) return;
+      this.stopWarm();
       const peer = this.ensurePeer();
       peer.listenForDataChannels();
       try {
@@ -282,6 +307,7 @@ export class LinkSession {
     this.closing = true;
     this.sendBye();
     this.clearDeadline();
+    this.stopWarm();
     this.timers.forEach((timer) => window.clearInterval(timer));
     this.timers = [];
     this.peer?.setCandidateSink(null);

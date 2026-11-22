@@ -110,6 +110,42 @@ export function waitForIceGathering(pc: RTCPeerConnection, timeoutMs = ICE_GATHE
   });
 }
 
+/**
+ * Pays the cold-start cost of address discovery while the link is still being
+ * sent. Two things are expensive on the first real handshake: the STUN hostnames
+ * (measured to error with `code=701` on the first lookup here and resolve on a
+ * later one) and the socket the agent opens to reach them. A throwaway agent that
+ * gathers and is dropped warms both, so the offer that matters starts from a
+ * resolved name. Returns a cancel for when the real handshake arrives first.
+ */
+export function warmIceServers(config: RTCConfiguration, ttlMs = 15_000): () => void {
+  if (!config.iceServers?.length) return () => undefined;
+  let pc: RTCPeerConnection | null = null;
+  try {
+    pc = createPeerConnection(config);
+    pc.addTransceiver('audio', { direction: 'sendrecv' });
+  } catch {
+    return () => undefined;
+  }
+  const warm = pc;
+  const stop = () => {
+    if (pc !== warm) return;
+    pc = null;
+    try {
+      warm.close();
+    } catch {
+      /* already gone */
+    }
+  };
+  void warm
+    .createOffer()
+    .then((offer) => warm.setLocalDescription(offer))
+    .then(() => waitForIceGathering(warm, ttlMs))
+    .catch(() => false)
+    .finally(stop);
+  return stop;
+}
+
 /** Extracts the candidate types present in an SDP blob, e.g. `{ host: 3 }`. */
 export function countCandidateTypes(sdp: string): Record<string, number> {
   const counts: Record<string, number> = {};

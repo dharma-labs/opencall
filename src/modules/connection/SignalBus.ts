@@ -11,7 +11,7 @@ import mqtt, { type MqttClient } from 'mqtt';
 
 const PROTOCOL = 'oc/v1';
 
-/** Public brokers, tried in order. Both are relay-only and hold nothing. */
+/** Public brokers, dialled at once; the first to answer is used. Both are relay-only and hold nothing. */
 export const DEFAULT_BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
 
 export type SignalKind = 'offer' | 'answer' | 'ice' | 'bye';
@@ -34,7 +34,8 @@ export interface BusHandlers {
   onReady?: () => void;
   /** Fires for every retained presence frame so a partner's freshness can be tracked. */
   onPeer?: (peer: PresenceInfo, first: boolean) => void;
-  onPeerGone?: (id: string) => void;
+  /** `bye` is true when the device said it left; false when we simply stopped hearing it. */
+  onPeerGone?: (id: string, bye: boolean) => void;
   onSignal?: (signal: DirectSignal) => void;
   onCrowded?: (count: number) => void;
   onStatus?: (message: string) => void;
@@ -42,8 +43,26 @@ export interface BusHandlers {
 }
 
 const ROOM_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
+/**
+ * Presence refreshes every 18 s, so a frame that has not moved in this long came
+ * from a tab that was closed, crashed or lost its socket. Retained frames outlive
+ * their author on a public broker, and counting them made dead rooms look full:
+ * one code reported 9 devices and refused the two real ones.
+ */
+const PEER_STALE_MS = 45_000;
+const PEER_SWEEP_MS = 15_000;
+/** Frames that land this soon after subscribing are the broker's retained history. */
+const RESTORED_BURST_MS = 400;
+/** One broker gets this long before it is treated as silent; the others are dialled meanwhile. */
+const BROKER_CONNECT_TIMEOUT_MS = 6000;
 
-/** Short, human-typeable room code. Collisions are irrelevant: an occupied room simply never answers. */
+/**
+ * Short, human-typeable room code. Fresh for every session — see `LinkSession`.
+ *
+ * `ROOM_ALPHABET` is 32 symbols and each byte feeds one character, so `% 32`
+ * costs no entropy here — unlike an alphabet of 31 or 36, where it would quietly
+ * make the leading characters likelier.
+ */
 export function createRoomCode(length = 9): string {
   const bytes = new Uint8Array(length);
   crypto.getRandomValues(bytes);
@@ -128,12 +147,18 @@ export class SignalBus {
 
   private client: MqttClient | null = null;
   private peers = new Map<string, PresenceInfo>();
+  private lastSeen = new Map<string, number>();
+  private sightings = new Map<string, number>();
+  private reported = new Set<string>();
+  private joinedAt = Date.now();
   private handler: BusHandlers;
   private room: string;
-  private brokerIndex = 0;
+  private candidates: MqttClient[] = [];
+  private failures = 0;
   private brokers: string[];
   private closing = false;
   private ready = false;
+  private sweeper = 0;
 
   constructor(
     room: string,
@@ -157,50 +182,74 @@ export class SignalBus {
   }
 
   private openBroker(): void {
-    const url = this.brokers[this.brokerIndex % this.brokers.length];
-    this.brokerIndex += 1;
     this.handler.onStatus?.('Reaching the link server…');
+    // Every broker is tried at once and the first to answer wins. In order was
+    // the slow path: a broker that took its time held the handshake for the
+    // whole connect timeout, and mqtt.js then re-dialled the same address.
+    // Candidates that lose stay dialled until something wins, so a broker that
+    // is merely slow is still there when the fast one turns out to be down.
+    const candidates: MqttClient[] = [];
+    this.candidates = candidates;
 
-    const client = mqtt.connect(url, {
-      clientId: `oc${randomId()}`,
-      keepalive: 20,
-      clean: true,
-      reconnectPeriod: 2500,
-      connectTimeout: 9000,
-    });
+    for (const url of this.brokers) {
+      const client = mqtt.connect(url, {
+        clientId: `oc${randomId()}`,
+        keepalive: 20,
+        clean: true,
+        reconnectPeriod: 2500,
+        connectTimeout: BROKER_CONNECT_TIMEOUT_MS,
+      });
+      candidates.push(client);
+
+      client.on('connect', () => this.settle(client));
+      client.on('message', (topic, payload) => {
+        if (this.client === client) this.onMessage(topic, payload);
+      });
+      client.on('reconnect', () => {
+        if (this.client !== client) return;
+        this.ready = false;
+        this.handler.onStatus?.('Link server reconnecting…');
+      });
+      client.on('close', () => {
+        if (this.client === client) this.ready = false;
+      });
+      client.on('error', (error) => {
+        if (this.ready) {
+          this.handler.onError?.(error instanceof Error ? error.message : 'Signalling error');
+          return;
+        }
+        // Only speak up once nothing has answered at all; a single candidate
+        // failing while the others are still dialling is not news.
+        this.failures += 1;
+        if (this.failures >= candidates.length && !this.client) {
+          this.handler.onError?.(error instanceof Error ? error.message : 'No link server answered.');
+        }
+      });
+    }
+  }
+
+  /** The first broker to answer becomes the session; the rest are hung up. */
+  private settle(client: MqttClient): void {
+    if (this.client) {
+      if (client !== this.client) client.end(true);
+      return;
+    }
     this.client = client;
-
-    client.on('connect', () => {
-      void this.onConnect(client);
-    });
-    client.on('message', (topic, payload) => this.onMessage(topic, payload));
-    client.on('reconnect', () => {
-      this.ready = false;
-      this.handler.onStatus?.('Link server reconnecting…');
-    });
-    client.on('close', () => {
-      this.ready = false;
-    });
-    client.on('error', (error) => {
-      const message = error instanceof Error ? error.message : 'Signalling error';
-      // A broker that will not answer is swapped for the next one; anything else
-      // is reported and left to mqtt.js's own reconnect loop.
-      if (!this.ready && this.brokerIndex < this.brokers.length) {
-        this.handler.onStatus?.('Trying a backup link server…');
-        client.end(true);
-        this.client = null;
-        this.openBroker();
-      } else {
-        this.handler.onError?.(message);
-      }
-    });
+    for (const other of this.candidates) {
+      if (other !== client) other.end(true);
+    }
+    void this.onConnect(client);
   }
 
   private async onConnect(client: MqttClient): Promise<void> {
     try {
       await client.subscribe([`${this.peerTopicRoot}#`, `${PROTOCOL}/${this.room}/d/${this.self.id}`], { qos: 0 });
+      // Anything seen in a short window from here on arrived as retained history.
+      this.joinedAt = Date.now();
       await this.publishPresence();
       this.ready = true;
+      window.addEventListener('pagehide', this.onPageHide);
+      this.sweeper = window.setInterval(() => this.sweepPeers(), PEER_SWEEP_MS);
       this.handler.onStatus?.('Link is live. Waiting for the other device.');
       this.handler.onReady?.();
     } catch (error) {
@@ -234,7 +283,10 @@ export class SignalBus {
       if (!id || id === this.self.id) return;
       if (!text) {
         // An empty retained frame is the other device saying it has left.
-        if (this.peers.delete(id)) this.handler.onPeerGone?.(id);
+        if (this.peers.has(id)) {
+          this.forget(id);
+          this.handler.onPeerGone?.(id, true);
+        }
         return;
       }
       let presence: PresenceInfo | null = null;
@@ -252,17 +304,32 @@ export class SignalBus {
         presence = null;
       }
       if (!presence) return;
-      const known = this.peers.has(id);
+      const arrived = Date.now();
       this.peers.set(id, presence);
-      if (known) {
-        this.handler.onPeer?.(presence, false);
+      this.lastSeen.set(id, arrived);
+      const sightings = (this.sightings.get(id) ?? 0) + 1;
+      this.sightings.set(id, sightings);
+
+      // A device that is alive follows its first frame with a heartbeat; a frame
+      // the broker kept for a tab that is gone never does. Frames that land in
+      // the burst right after subscribing are the room's history rather than
+      // arrivals, so an unseen id from that burst is held back until it repeats.
+      // Judging by arrival, not by `ts`, keeps two devices whose clocks disagree
+      // able to see each other — the cost is that a peer which opened the link
+      // in the same second as this one is picked up on its next heartbeat.
+      if (!this.reported.has(id)) {
+        const fromThePast = sightings < 2 && arrived - this.joinedAt <= RESTORED_BURST_MS;
+        if (fromThePast) return;
+        const crowded = this.provenPeers() + 1;
+        if (crowded > 2) {
+          this.handler.onCrowded?.(crowded);
+          return;
+        }
+        this.reported.add(id);
+        this.handler.onPeer?.(presence, true);
         return;
       }
-      if (this.peers.size > 1) {
-        this.handler.onCrowded?.(this.peers.size + 1);
-        return;
-      }
-      this.handler.onPeer?.(presence, true);
+      this.handler.onPeer?.(presence, false);
       return;
     }
 
@@ -298,21 +365,94 @@ export class SignalBus {
     void this.publishPresence();
   }
 
+  /** Devices proven alive: they announced themselves more than once, recently. */
+  private provenPeers(): number {
+    const now = Date.now();
+    let live = 0;
+    for (const [id, at] of this.lastSeen) {
+      if (now - at > PEER_STALE_MS) continue;
+      if ((this.sightings.get(id) ?? 0) < 2) continue;
+      live += 1;
+    }
+    return live;
+  }
+
+  /**
+   * Forgets devices that stopped announcing themselves and blanks their retained
+   * frame so the whole room stops seeing them. Without this, tabs that were
+   * closed without a goodbye keep counting toward the two-device limit for as
+   * long as the broker retains them — which is how a fresh link reported nine
+   * strangers and refused the two real ones.
+   */
+  private sweepPeers(): void {
+    if (!this.client || this.closing) return;
+    const now = Date.now();
+    for (const [id, at] of this.lastSeen) {
+      if (now - at <= PEER_STALE_MS) continue;
+      this.forget(id);
+      this.eraseGhost(id);
+      // Silence is not a goodbye: a backgrounded device throttles its own
+      // heartbeat, and its line should stay up on the strength of the data
+      // channel. The caller decides what a quiet peer means.
+      this.handler.onPeerGone?.(id, false);
+    }
+  }
+
+  private forget(id: string): void {
+    this.peers.delete(id);
+    this.lastSeen.delete(id);
+    this.sightings.delete(id);
+    this.reported.delete(id);
+  }
+
+  /** Empties a retained frame so the room stops counting a device that is gone. */
+  private eraseGhost(id: string): void {
+    const client = this.client;
+    if (!client) return;
+    try {
+      client.publish(`${this.peerTopicRoot}${id}`, '', { qos: 0, retain: true });
+    } catch {
+      /* the frame simply outlives this attempt */
+    }
+  }
+
+  /** A tab that vanishes should not leave a ghost behind: say goodbye on the way out. */
+  private onPageHide = (): void => {
+    const client = this.client;
+    if (!client || this.closing) return;
+    try {
+      client.publish(`${this.peerTopicRoot}${this.self.id}`, '', { qos: 0, retain: true });
+    } catch {
+      /* best effort during unload */
+    }
+  };
+
   close(): void {
     if (this.closing) return;
     this.closing = true;
+    if (this.sweeper) window.clearInterval(this.sweeper);
+    this.sweeper = 0;
+    window.removeEventListener('pagehide', this.onPageHide);
     const client = this.client;
     this.client = null;
-    if (!client) return;
-    try {
-      client.publish(`${this.peerTopicRoot}${this.self.id}`, '', { qos: 0, retain: true });
-      for (const id of this.peers.keys()) {
-        this.handler.onPeerGone?.(id);
+    if (client) {
+      try {
+        client.publish(`${this.peerTopicRoot}${this.self.id}`, '', { qos: 0, retain: true });
+        for (const id of this.peers.keys()) {
+          // This device is the one leaving, so nobody was told to go elsewhere.
+          this.handler.onPeerGone?.(id, false);
+        }
+      } catch {
+        /* best effort */
       }
-    } catch {
-      /* best effort */
+      this.peers.clear();
+      this.lastSeen.clear();
+      this.sightings.clear();
+      this.reported.clear();
     }
-    this.peers.clear();
-    client.end(true);
+    // Brokers still dialling belong to a session that no longer exists.
+    for (const candidate of this.candidates) candidate.end(true);
+    this.candidates = [];
+    if (client) client.end(true);
   }
 }
