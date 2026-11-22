@@ -57,7 +57,7 @@ no relay of any kind.
 | Production serve | `npm run preview` | **Pass — `index.html`, the JS bundle and the CSS all 200; the served shell shows `Chats`, `History`, `Settings`, `New call`, `Paste a link to join`, `Send the link`, `Copy link` and the theme/accent/wallpaper switcher.** |
 | PWA assets in build | `npm run build` | **Pass — `manifest.webmanifest`, `sw.js`, `favicon.svg`, `favicon.ico`, `favicon.png`, `icons/` (192, 512, maskable-512, apple-touch-180, favicon-32) all emitted to `dist/`** |
 | Desktop shell boot (Electron) | `npx electron .` | **Pass — the window loaded `opencall://app/index.html` and the renderer ran; the only console output was Electron's dev-time CSP notice, which the packaged build silences.** |
-| Desktop package (Electron) | `npm run desktop:dist` | **Pass — rebuilt after the UI redesign with electron-builder 26.18.0 / Electron 45.4.1: `release/OpenCall-Setup-1.0.0.exe` (123,103,709 B ≈ 116.6 MiB), `release/OpenCall-Portable-1.0.0.exe` (111,738,603 B ≈ 106.6 MiB), `release/win-unpacked/OpenCall.exe`.** |
+| Desktop package (Electron) | `npm run desktop:dist` | **Pass — rebuilt with the presence and broker fixes (bundle `index-FVyuMalP.js`) using electron-builder 26.18.0 / Electron 45.4.1: `release/OpenCall-Setup-1.0.0.exe` (123,104,471 B ≈ 117.4 MiB), `release/OpenCall-Portable-1.0.0.exe` (111,739,289 B ≈ 106.6 MiB), `release/win-unpacked/OpenCall.exe`.** |
 | Desktop build (Tauri 2) | `npm run desktop:tauri:build` | See §8 — reports its own result |
 | Mobile platform added | `npx cap add android` + `npx cap sync android` | **Pass — `android/` generated and the web build copied into `android/app/src/main/assets/public`; camera/microphone permissions added to `AndroidManifest.xml`** |
 | Android APK | `cd android && ./gradlew assembleDebug` | **Pass — `app-debug.apk` (4,598,191 B ≈ 4.39 MB), copied to `OpenCall-1.0.0-debug.apk`. Built with Capacitor 8 / AGP 8.13.0 / Gradle 8.14.3 on Temurin JDK 21.0.12 (see §8).** |
@@ -404,8 +404,8 @@ Temurin JDK 21.0.12, Android SDK (platforms 34–37, build-tools 34.0.0–37.0.0
 
 | Target | Outcome | Artifact |
 | --- | --- | --- |
-| Web / PWA | Built and served successfully (rebuilt after the UI redesign) | `dist/` — `index.html` 1.52 kB, CSS 41.27 kB, JS 411.42 kB; shipped as `OpenCall-1.0.0-web.zip` (284,998 B) |
-| Electron desktop | **Built and packaged** after the UI redesign | `release/OpenCall-Setup-1.0.0.exe` (123,103,709 B ≈ 117.4 MiB), `release/OpenCall-Portable-1.0.0.exe` (111,738,603 B ≈ 106.6 MiB), `release/win-unpacked/OpenCall.exe` |
+| Web / PWA | Built and served successfully (rebuilt after the UI redesign) | `dist/` — `index.html` 1.55 kB, CSS 50.07 kB, JS 772.48 kB; shipped as `OpenCall-1.0.0-web.zip` (285,494 B) |
+| Electron desktop | **Built and packaged** after the UI redesign | `release/OpenCall-Setup-1.0.0.exe` (123,104,471 B ≈ 117.4 MiB), `release/OpenCall-Portable-1.0.0.exe` (111,739,289 B ≈ 106.6 MiB), `release/win-unpacked/OpenCall.exe` |
 | Tauri desktop (binary) | **Compiled** in 3m 05s (release profile, after the UI redesign) | `src-tauri/target/release/opencall.exe` (3,279,360 B ≈ 3.13 MiB) |
 | Tauri desktop (NSIS installer) | **Built** | `src-tauri/target/release/bundle/nsis/OpenCall_1.0.0_x64-setup.exe` (1,253,965 B ≈ 1.20 MiB) |
 | Tauri desktop (MSI) | **Failed — environment, not configuration.** Tauri downloads the WiX toolset to `%LOCALAPPDATA%\tauri\WixTools314`; the sandboxed shell blocks that write, so it reports `failed to bundle project: Access is denied. (os error 5)`. The binary and NSIS installer above are produced by the same run and are complete. Re-run `npm run desktop:tauri:build` from a normal terminal to get the MSI. | — |
@@ -425,7 +425,7 @@ All six are current — rebuilt in the same run as the sources documented above.
 | `OpenCall_1.0.0_x64-setup.exe` | 1.20 MiB | Tauri NSIS installer |
 | `OpenCall-1.0.0-tauri-portable.exe` | 3.13 MiB | Tauri binary, runs with no installation |
 | `OpenCall-1.0.0-debug.apk` | 4.12 MB | Android debug APK, installs directly with `adb install -r` |
-| `OpenCall-1.0.0-web.zip` | 284,998 B | Static web/PWA build — unzip and serve over HTTPS |
+| `OpenCall-1.0.0-web.zip` | 285,494 B | Static web/PWA build — unzip and serve over HTTPS |
 
 The desktop builds are unsigned (no code-signing certificate is configured), so
 Windows SmartScreen will warn on first launch. Signing is a distribution concern
